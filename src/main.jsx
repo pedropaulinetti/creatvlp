@@ -1,9 +1,10 @@
-import React, { StrictMode, useState } from "react";
+import React, { StrictMode, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { ArrowLeft, ArrowRight, ArrowUp, Check, ChevronDown, Layers3, Menu, MessageCircle, Play, Plus, Search, WandSparkles, X, Zap } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUp, Check, ChevronDown, Download, Eye, Inbox, Layers3, LockKeyhole, LogOut, Menu, MessageCircle, Play, Plus, RefreshCw, Search, WandSparkles, X, Zap } from "lucide-react";
 import logo from "./assets/logo.svg?url";
 import cityBridge from "./assets/hero-city.png";
 import tag from "./assets/TAG.svg?url";
+import { supabase } from "./lib/supabase";
 import "./index.css";
 
 function SoftButton({ children, light = false, onClick, type = "button", className = "" }) {
@@ -208,6 +209,92 @@ function ConversationalResearchPage(){
   </main>
 }
 
+const ADMIN_EMAIL="pedropaulinettid@gmail.com";
+const answerLabels=Object.fromEntries(diagnosisSteps.map(item=>[item.key,item.label]));
+
+function csvValue(value){
+  const text=Array.isArray(value)?value.join("; "):String(value??"");
+  return `"${text.replaceAll('"','""')}"`;
+}
+
+function AdminPortal(){
+  const[session,setSession]=useState(null);
+  const[authReady,setAuthReady]=useState(false);
+  const[loginSent,setLoginSent]=useState(false);
+  const[loginError,setLoginError]=useState("");
+  const[responses,setResponses]=useState([]);
+  const[loading,setLoading]=useState(false);
+  const[dataError,setDataError]=useState("");
+  const[query,setQuery]=useState("");
+  const[pilotFilter,setPilotFilter]=useState("todos");
+  const[selected,setSelected]=useState(null);
+
+  useEffect(()=>{
+    if(!supabase){setAuthReady(true);return}
+    supabase.auth.getSession().then(({data})=>{setSession(data.session);setAuthReady(true)});
+    const{data:{subscription}}=supabase.auth.onAuthStateChange((_event,nextSession)=>{setSession(nextSession);setAuthReady(true)});
+    return()=>subscription.unsubscribe();
+  },[]);
+
+  const authorized=session?.user?.email?.toLowerCase()===ADMIN_EMAIL;
+  const loadResponses=async()=>{
+    if(!authorized||!supabase)return;
+    setLoading(true);setDataError("");
+    const{data,error}=await supabase.from("research_responses").select("*").order("created_at",{ascending:false});
+    if(error)setDataError("Não foi possível carregar as respostas. Confira se a regra de acesso do portal foi aplicada no Supabase.");
+    else setResponses(data||[]);
+    setLoading(false);
+  };
+
+  useEffect(()=>{if(authorized)loadResponses()},[authorized]);
+
+  const filtered=useMemo(()=>responses.filter(item=>{
+    const term=query.trim().toLowerCase();
+    const matchesSearch=!term||[item.nome,item.empresa,item.email,item.telefone].some(value=>String(value||"").toLowerCase().includes(term));
+    const wantsPilot=item.respostas?.piloto==="Sim, quero participar";
+    const matchesPilot=pilotFilter==="todos"||(pilotFilter==="piloto"?wantsPilot:!wantsPilot);
+    return matchesSearch&&matchesPilot;
+  }),[responses,query,pilotFilter]);
+
+  const metrics=useMemo(()=>({
+    total:responses.length,
+    pilot:responses.filter(item=>item.respostas?.piloto==="Sim, quero participar").length,
+    urgent:responses.filter(item=>item.respostas?.urgencia==="Agora").length,
+    active:responses.filter(item=>!["Ainda não investe",undefined].includes(item.respostas?.midia)).length,
+  }),[responses]);
+
+  const sendMagicLink=async(event)=>{
+    event.preventDefault();setLoginError("");
+    if(!supabase){setLoginError("As variáveis do Supabase não estão configuradas.");return}
+    const{error}=await supabase.auth.signInWithOtp({email:ADMIN_EMAIL,options:{emailRedirectTo:`${window.location.origin}/admin`}});
+    if(error)setLoginError("Não conseguimos enviar o link. Confira a configuração de autenticação no Supabase.");
+    else setLoginSent(true);
+  };
+
+  const exportCsv=()=>{
+    const keys=diagnosisSteps.map(item=>item.key);
+    const header=["Data","Nome","Empresa","Telefone","E-mail",...keys.map(key=>answerLabels[key])];
+    const rows=filtered.map(item=>[new Date(item.created_at).toLocaleString("pt-BR"),item.nome,item.empresa,item.telefone,item.email,...keys.map(key=>item.respostas?.[key])]);
+    const blob=new Blob([[header,...rows].map(row=>row.map(csvValue).join(",")).join("\n")],{type:"text/csv;charset=utf-8"});
+    const href=URL.createObjectURL(blob);const link=document.createElement("a");link.href=href;link.download=`creatvos-respostas-${new Date().toISOString().slice(0,10)}.csv`;link.click();URL.revokeObjectURL(href);
+  };
+
+  if(!authReady)return <main className="admin-loading"><span/><p>Preparando o portal</p></main>;
+  if(!session)return <main className="admin-login"><section className="admin-login-story"><img src={logo} alt="CreatvOS"/><div><small>PORTAL DE PESQUISA</small><h1>As respostas<br/>que orientam <em>o produto.</em></h1><p>Acesso reservado para acompanhar os sinais, dores e oportunidades encontrados na pesquisa.</p></div><span>CREATVOS · BRASIL</span></section><section className="admin-login-form"><form onSubmit={sendMagicLink}><LockKeyhole/><small>ACESSO PROTEGIDO</small><h2>Entrar no portal</h2><p>Enviaremos um link seguro para o e-mail autorizado.</p><label>E-mail<input type="email" value={ADMIN_EMAIL} readOnly/></label><button type="submit">{loginSent?"Enviar novamente":"Enviar link de acesso"}<ArrowRight/></button>{loginSent&&<div className="admin-login-notice"><Check/> Link enviado. Abra o e-mail neste dispositivo.</div>}{loginError&&<div className="admin-login-error">{loginError}</div>}</form></section></main>;
+  if(!authorized)return <main className="admin-denied"><LockKeyhole/><small>ACESSO NÃO AUTORIZADO</small><h1>Este e-mail não tem acesso ao portal.</h1><p>O acesso está reservado para {ADMIN_EMAIL}.</p><button onClick={()=>supabase.auth.signOut()}>Sair desta conta</button></main>;
+
+  return <main className="admin-page">
+    <header className="admin-topbar"><a href="/"><img src={logo} alt="CreatvOS"/></a><div><span>PORTAL DE PESQUISA</span><i>ACESSO PRIVADO</i></div><nav><button onClick={loadResponses} title="Atualizar"><RefreshCw/></button><button onClick={exportCsv} disabled={!filtered.length}><Download/><span>Exportar CSV</span></button><button onClick={()=>supabase.auth.signOut()} title="Sair"><LogOut/></button></nav></header>
+    <section className="admin-intro"><div><small>DESCOBERTA CONTÍNUA</small><h1>O que o mercado<br/>está tentando <em>nos dizer.</em></h1></div><p>Um lugar para encontrar padrões nas respostas e decidir o que merece ser construído primeiro.</p></section>
+    <section className="admin-metrics"><article><span>TOTAL DE RESPOSTAS</span><strong>{metrics.total}</strong><small>pessoas ouvidas</small></article><article><span>QUEREM TESTAR</span><strong>{metrics.pilot}</strong><small>interesse no piloto</small></article><article><span>PRECISAM AGORA</span><strong>{metrics.urgent}</strong><small>urgência declarada</small></article><article><span>JÁ INVESTEM</span><strong>{metrics.active}</strong><small>operações com mídia</small></article></section>
+    <section className="admin-board"><div className="admin-controls"><label><Search/><input value={query} onChange={event=>setQuery(event.target.value)} placeholder="Buscar nome, empresa ou e-mail"/></label><select value={pilotFilter} onChange={event=>setPilotFilter(event.target.value)}><option value="todos">Todos os perfis</option><option value="piloto">Quer participar do piloto</option><option value="outros">Demais respostas</option></select><span>{filtered.length} {filtered.length===1?"resposta":"respostas"}</span></div>
+      <div className="admin-table-head"><span>CONTATO</span><span>OPERAÇÃO</span><span>INVESTIMENTO</span><span>SINAL</span><span>DATA</span><span/></div>
+      <div className="admin-response-list">{loading?<div className="admin-empty"><RefreshCw/><h3>Carregando respostas</h3></div>:dataError?<div className="admin-empty"><LockKeyhole/><h3>{dataError}</h3></div>:filtered.length?filtered.map(item=><button className="admin-response-row" key={item.id} onClick={()=>setSelected(item)}><span><b>{item.nome||"Sem nome"}</b><small>{item.email}</small></span><span><b>{item.empresa||"Não informada"}</b><small>{item.respostas?.operacao||"Sem categoria"}</small></span><span><b>{item.respostas?.investimento||"Não informado"}</b><small>{item.respostas?.midia||"Mídia não informada"}</small></span><span className={item.respostas?.piloto==="Sim, quero participar"?"admin-signal hot":"admin-signal"}>{item.respostas?.piloto==="Sim, quero participar"?"QUER TESTAR":"ACOMPANHAR"}</span><time>{new Date(item.created_at).toLocaleDateString("pt-BR")}</time><Eye/></button>):<div className="admin-empty"><Inbox/><h3>Nenhuma resposta encontrada</h3><p>Ajuste a busca ou aguarde novas respostas.</p></div>}</div>
+    </section>
+    {selected&&<div className="admin-drawer-backdrop" onClick={()=>setSelected(null)}><aside className="admin-drawer" onClick={event=>event.stopPropagation()}><header><div><small>RESPOSTA COMPLETA</small><h2>{selected.nome}</h2><p>{selected.empresa} · {selected.email}</p></div><button onClick={()=>setSelected(null)}><X/></button></header><div className="admin-answer-list">{diagnosisSteps.map(item=>{const value=selected.respostas?.[item.key];return <article key={item.key}><span>{item.label}</span><p>{Array.isArray(value)?value.join(" · "):value||"Não informado"}</p></article>})}</div></aside></div>}
+  </main>;
+}
+
 function App(){const join=()=>window.location.assign("/pesquisa");return <><Header onJoin={join}/><Hero onJoin={join}/></>}
 const page=window.location.pathname.replace(/\/$/,"");
-createRoot(document.getElementById("root")).render(<StrictMode>{page==="/pesquisa"?<ConversationalResearchPage/>:<App/>}</StrictMode>);
+createRoot(document.getElementById("root")).render(<StrictMode>{page==="/pesquisa"?<ConversationalResearchPage/>:page==="/admin"?<AdminPortal/>:<App/>}</StrictMode>);
