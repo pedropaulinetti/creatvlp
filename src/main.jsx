@@ -209,7 +209,7 @@ function ConversationalResearchPage(){
   </main>
 }
 
-const ADMIN_EMAIL="pedropaulinettid@gmail.com";
+const ADMIN_EMAIL="pedro@startu.com.br";
 const answerLabels=Object.fromEntries(diagnosisSteps.map(item=>[item.key,item.label]));
 
 function csvValue(value){
