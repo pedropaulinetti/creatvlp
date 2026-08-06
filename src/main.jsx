@@ -1,6 +1,6 @@
 import React, { StrictMode, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { ArrowLeft, ArrowRight, ArrowUp, Check, ChevronDown, Download, Eye, Inbox, Layers3, LockKeyhole, LogOut, Menu, MessageCircle, Play, Plus, RefreshCw, Search, WandSparkles, X, Zap } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUp, Check, ChevronDown, Download, Eye, EyeOff, Inbox, Layers3, LockKeyhole, LogOut, Menu, MessageCircle, Play, Plus, RefreshCw, Search, WandSparkles, X, Zap } from "lucide-react";
 import logo from "./assets/logo.svg?url";
 import cityBridge from "./assets/hero-city.png";
 import tag from "./assets/TAG.svg?url";
@@ -220,7 +220,9 @@ function csvValue(value){
 function AdminPortal(){
   const[session,setSession]=useState(null);
   const[authReady,setAuthReady]=useState(false);
-  const[loginSent,setLoginSent]=useState(false);
+  const[password,setPassword]=useState("");
+  const[showPassword,setShowPassword]=useState(false);
+  const[signingIn,setSigningIn]=useState(false);
   const[loginError,setLoginError]=useState("");
   const[responses,setResponses]=useState([]);
   const[loading,setLoading]=useState(false);
@@ -263,12 +265,12 @@ function AdminPortal(){
     active:responses.filter(item=>!["Ainda não investe",undefined].includes(item.respostas?.midia)).length,
   }),[responses]);
 
-  const sendMagicLink=async(event)=>{
-    event.preventDefault();setLoginError("");
-    if(!supabase){setLoginError("As variáveis do Supabase não estão configuradas.");return}
-    const{error}=await supabase.auth.signInWithOtp({email:ADMIN_EMAIL,options:{emailRedirectTo:`${window.location.origin}/admin`}});
-    if(error)setLoginError("Não conseguimos enviar o link. Confira a configuração de autenticação no Supabase.");
-    else setLoginSent(true);
+  const signIn=async(event)=>{
+    event.preventDefault();setLoginError("");setSigningIn(true);
+    if(!supabase){setLoginError("As variáveis do Supabase não estão configuradas.");setSigningIn(false);return}
+    const{error}=await supabase.auth.signInWithPassword({email:ADMIN_EMAIL,password});
+    if(error)setLoginError("E-mail ou senha incorretos. Confira os dados e tente novamente.");
+    setSigningIn(false);
   };
 
   const exportCsv=()=>{
@@ -280,7 +282,7 @@ function AdminPortal(){
   };
 
   if(!authReady)return <main className="admin-loading"><span/><p>Preparando o portal</p></main>;
-  if(!session)return <main className="admin-login"><section className="admin-login-story"><img src={logo} alt="CreatvOS"/><div><small>PORTAL DE PESQUISA</small><h1>As respostas<br/>que orientam <em>o produto.</em></h1><p>Acesso reservado para acompanhar os sinais, dores e oportunidades encontrados na pesquisa.</p></div><span>CREATVOS · BRASIL</span></section><section className="admin-login-form"><form onSubmit={sendMagicLink}><LockKeyhole/><small>ACESSO PROTEGIDO</small><h2>Entrar no portal</h2><p>Enviaremos um link seguro para o e-mail autorizado.</p><label>E-mail<input type="email" value={ADMIN_EMAIL} readOnly/></label><button type="submit">{loginSent?"Enviar novamente":"Enviar link de acesso"}<ArrowRight/></button>{loginSent&&<div className="admin-login-notice"><Check/> Link enviado. Abra o e-mail neste dispositivo.</div>}{loginError&&<div className="admin-login-error">{loginError}</div>}</form></section></main>;
+  if(!session)return <main className="admin-login"><section className="admin-login-story"><img src={logo} alt="CreatvOS"/><div><small>PORTAL DE PESQUISA</small><h1>As respostas<br/>que orientam <em>o produto.</em></h1><p>Acesso reservado para acompanhar os sinais, dores e oportunidades encontrados na pesquisa.</p></div><span>CREATVOS · BRASIL</span></section><section className="admin-login-form"><form onSubmit={signIn}><LockKeyhole/><small>ACESSO PROTEGIDO</small><h2>Entrar no portal</h2><p>Use seu e-mail e senha para acessar as respostas.</p><label>E-mail<input type="email" value={ADMIN_EMAIL} readOnly/></label><label>Senha<div className="admin-password"><input autoComplete="current-password" type={showPassword?"text":"password"} value={password} onChange={event=>setPassword(event.target.value)} placeholder="Digite sua senha" required/><button type="button" onClick={()=>setShowPassword(value=>!value)} aria-label={showPassword?"Ocultar senha":"Mostrar senha"}>{showPassword?<EyeOff/>:<Eye/>}</button></div></label><button className="admin-login-submit" type="submit" disabled={!password||signingIn}>{signingIn?"Entrando...":"Entrar no portal"}<ArrowRight/></button>{loginError&&<div className="admin-login-error">{loginError}</div>}</form></section></main>;
   if(!authorized)return <main className="admin-denied"><LockKeyhole/><small>ACESSO NÃO AUTORIZADO</small><h1>Este e-mail não tem acesso ao portal.</h1><p>O acesso está reservado para {ADMIN_EMAIL}.</p><button onClick={()=>supabase.auth.signOut()}>Sair desta conta</button></main>;
 
   return <main className="admin-page">
