@@ -145,27 +145,17 @@ function formatBrazilPhone(value){
 }
 
 async function persistResearch(response){
-  const supabaseUrl=import.meta.env.VITE_SUPABASE_URL;
-  const publishableKey=import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-  if(!supabaseUrl||!publishableKey)throw new Error("Supabase não configurado");
-  const request=await fetch(`${supabaseUrl}/rest/v1/research_responses`,{
-    method:"POST",
-    headers:{
-      apikey:publishableKey,
-      "Content-Type":"application/json",
-      Prefer:"return=minimal",
-    },
-    body:JSON.stringify({
-      id:response.id,
-      nome:response.nome,
-      empresa:response.marca,
-      telefone:response.telefone,
-      email:response.email,
-      origem:window.location.hostname,
-      respostas:response,
-    }),
+  if(!supabase)throw new Error("Supabase não configurado");
+  const{error}=await supabase.from("research_responses").insert({
+    id:response.id,
+    nome:response.nome,
+    empresa:response.marca,
+    telefone:response.telefone,
+    email:response.email,
+    origem:window.location.hostname,
+    respostas:response,
   });
-  if(!request.ok){const details=await request.text();throw new Error(details||"Não foi possível enviar a pesquisa")}
+  if(error)throw error;
 }
 
 function ResearchPage(){const[step,setStep]=useState(0);const[sent,setSent]=useState(false);const[answers,setAnswers]=useState({nome:"",operacao:"",marca:"",dores:[],impacto:"",volume:"",contexto:"",email:"",whatsapp:""});const current=diagnosisSteps[step];const update=(key,value)=>setAnswers({...answers,[key]:value});const toggle=(option)=>update("dores",answers.dores.includes(option)?answers.dores.filter(item=>item!==option):[...answers.dores,option]);const canContinue=()=>current.key==="dores"?answers.dores.length>0:current.contact?/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(answers.email):String(answers[current.key]||"").trim().length>0;const next=(event)=>{event.preventDefault();if(!canContinue())return;if(step===diagnosisSteps.length-1)setSent(true);else setStep(step+1)};const summary=(item)=>{const value=answers[item.key];if(Array.isArray(value))return value.join(" · ");return value};return <main className="diagnosis-page"><header className="diagnosis-header"><a href="/"><img src={logo} alt="CreatvOS"/></a><span>{sent?"NA LISTA":`${String(step+1).padStart(2,"0")} / ${String(diagnosisSteps.length).padStart(2,"0")}`}</span><a href="/" aria-label="Voltar ao site"><X/></a></header>{sent?<section className="diagnosis-success"><span><Check/></span><small>RESPOSTA RECEBIDA</small><h1>Obrigado, {answers.nome}.<br/>Sua experiência agora faz parte da construção.</h1><p>Vamos considerar o cenário da {answers.marca} ao definir o produto. Avisaremos quando os primeiros testes forem abertos.</p><a href="/">Voltar para a página</a></section>:<div className="diagnosis-layout"><aside className="diagnosis-rail"><div><span>PESQUISA CREATVOS</span><h2>Antes de construir,<br/>queremos ouvir.</h2><p>8 perguntas sobre a realidade da sua operação.</p></div><div className="diagnosis-summary">{diagnosisSteps.slice(0,step).map(item=><div key={item.key}><span>{item.label}</span><p>{summary(item)}</p></div>)}</div><div className="diagnosis-wave">{Array.from({length:9},(_,index)=><i key={index}/>)}</div></aside><form className="diagnosis-stage" onSubmit={next}><div className="diagnosis-progress"><i style={{width:`${((step+1)/diagnosisSteps.length)*100}%`}}/></div><div className="diagnosis-copy" key={current.key}><span>{current.label}</span><h1>{current.question}</h1><p>{current.helper}</p></div><div className="diagnosis-answer">{current.options&&<div className="diagnosis-choices">{current.options.map(option=>{const selected=current.multiple?answers.dores.includes(option):answers[current.key]===option;return <button type="button" key={option} className={selected?"selected":""} onClick={()=>current.multiple?toggle(option):update(current.key,option)}><span>{option}</span><i>{selected?<Check/>:<ArrowRight/>}</i></button>})}</div>}{!current.options&&!current.contact&&<label>{current.long?<textarea autoFocus rows="4" value={answers[current.key]} onChange={event=>update(current.key,event.target.value)} placeholder="Escreva do seu jeito..."/>:<input autoFocus value={answers[current.key]} onChange={event=>update(current.key,event.target.value)} placeholder={current.key==="nome"?"Seu primeiro nome":"Nome da marca ou operação"}/>}</label>}{current.contact&&<div className="diagnosis-contact"><label>E-mail profissional<input autoFocus type="email" value={answers.email} onChange={event=>update("email",event.target.value)} placeholder="voce@empresa.com"/></label><label>WhatsApp <small>opcional</small><input type="tel" value={answers.whatsapp} onChange={event=>update("whatsapp",event.target.value)} placeholder="(00) 00000-0000"/></label></div>}</div><div className="diagnosis-actions"><button type="button" onClick={()=>setStep(Math.max(0,step-1))} disabled={step===0}><ArrowLeft/> Voltar</button><button type="submit" disabled={!canContinue()}>{step===diagnosisSteps.length-1?"Enviar respostas":"Continuar"}<ArrowRight/></button></div></form></div>}</main>}
@@ -177,6 +167,7 @@ function ConversationalResearchPage(){
   const [submitError,setSubmitError]=useState("");
   const [responseId]=useState(()=>crypto.randomUUID());
   const [answers,setAnswers]=useState({nome:"",marca:"",telefone:"",email:"",site:"",papel:"",decisao:"",operacao:"",publico:"",equipe:"",faturamento:"",catalogo:"",ticket:"",midia:"",canais:[],processo:"",ferramentas:[],volume:"",formatos:[],prazo:"",custoCriativo:"",dores:[],impacto:"",prioridade:"",prioridades:[],investimento:"",urgencia:"",piloto:"",contexto:"",consentimento:""});
+  useEffect(()=>{const pending=localStorage.getItem("creatvos_research_pending");if(!pending)return;try{persistResearch(JSON.parse(pending)).then(()=>localStorage.removeItem("creatvos_research_pending")).catch(()=>{})}catch{localStorage.removeItem("creatvos_research_pending")}},[]);
   const current=diagnosisSteps[step];
   const update=(key,value)=>setAnswers(previous=>({...previous,[key]:value}));
   const toggle=(option)=>{const selected=answers[current.key]||[];update(current.key,selected.includes(option)?selected.filter(item=>item!==option):[...selected,option])};
@@ -220,6 +211,7 @@ function csvValue(value){
 function AdminPortal(){
   const[session,setSession]=useState(null);
   const[authReady,setAuthReady]=useState(false);
+  const[loginEmail,setLoginEmail]=useState("");
   const[password,setPassword]=useState("");
   const[showPassword,setShowPassword]=useState(false);
   const[signingIn,setSigningIn]=useState(false);
@@ -273,7 +265,7 @@ function AdminPortal(){
   const signIn=async(event)=>{
     event.preventDefault();setLoginError("");setSigningIn(true);
     if(!supabase){setLoginError("As variáveis do Supabase não estão configuradas.");setSigningIn(false);return}
-    const{error}=await supabase.auth.signInWithPassword({email:ADMIN_EMAIL,password});
+    const{error}=await supabase.auth.signInWithPassword({email:loginEmail.trim().toLowerCase(),password});
     if(error)setLoginError("E-mail ou senha incorretos. Confira os dados e tente novamente.");
     setSigningIn(false);
   };
@@ -281,7 +273,9 @@ function AdminPortal(){
   const requestPasswordReset=async()=>{
     if(!supabase||resetting)return;
     setResetting(true);setLoginError("");
-    const{error}=await supabase.auth.resetPasswordForEmail(ADMIN_EMAIL,{redirectTo:`${window.location.origin}/admin`});
+    const email=loginEmail.trim().toLowerCase();
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){setLoginError("Digite um e-mail válido para definir a senha.");setResetting(false);return}
+    const{error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo:`${window.location.origin}/admin`});
     if(error)setLoginError("Não conseguimos enviar a definição de senha. Tente novamente em alguns minutos.");
     else setResetSent(true);
     setResetting(false);
@@ -308,7 +302,7 @@ function AdminPortal(){
 
   if(!authReady)return <main className="admin-loading"><span/><p>Preparando o portal</p></main>;
   if(recovering&&session)return <main className="admin-login"><section className="admin-login-story"><img src={logo} alt="CreatvOS"/><div><small>NOVO ACESSO</small><h1>Uma senha sua.<br/>A pesquisa <em>protegida.</em></h1><p>Defina a senha que será usada nos próximos acessos ao portal.</p></div><span>CREATVOS · BRASIL</span></section><section className="admin-login-form"><form onSubmit={saveNewPassword}><LockKeyhole/><small>DEFINIR SENHA</small><h2>Crie sua senha</h2><p>Use pelo menos 8 caracteres. Depois de salvar, você entrará diretamente no portal.</p><label>Nova senha<div className="admin-password"><input autoComplete="new-password" type={showPassword?"text":"password"} value={newPassword} onChange={event=>setNewPassword(event.target.value)} placeholder="Mínimo de 8 caracteres" required/><button type="button" onClick={()=>setShowPassword(value=>!value)} aria-label={showPassword?"Ocultar senha":"Mostrar senha"}>{showPassword?<EyeOff/>:<Eye/>}</button></div></label><label>Confirmar senha<input autoComplete="new-password" type="password" value={confirmPassword} onChange={event=>setConfirmPassword(event.target.value)} placeholder="Digite novamente" required/></label><button className="admin-login-submit" type="submit" disabled={!newPassword||!confirmPassword||resetting}>{resetting?"Salvando...":"Salvar nova senha"}<ArrowRight/></button>{loginError&&<div className="admin-login-error">{loginError}</div>}</form></section></main>;
-  if(!session)return <main className="admin-login"><section className="admin-login-story"><img src={logo} alt="CreatvOS"/><div><small>PORTAL DE PESQUISA</small><h1>As respostas<br/>que orientam <em>o produto.</em></h1><p>Acesso reservado para acompanhar os sinais, dores e oportunidades encontrados na pesquisa.</p></div><span>CREATVOS · BRASIL</span></section><section className="admin-login-form"><form onSubmit={signIn}><LockKeyhole/><small>ACESSO PROTEGIDO</small><h2>Entrar no portal</h2><p>Use seu e-mail e senha para acessar as respostas.</p><label>E-mail<input type="email" value={ADMIN_EMAIL} readOnly/></label><label>Senha<div className="admin-password"><input autoComplete="current-password" type={showPassword?"text":"password"} value={password} onChange={event=>setPassword(event.target.value)} placeholder="Digite sua senha" required/><button type="button" onClick={()=>setShowPassword(value=>!value)} aria-label={showPassword?"Ocultar senha":"Mostrar senha"}>{showPassword?<EyeOff/>:<Eye/>}</button></div></label><button className="admin-login-submit" type="submit" disabled={!password||signingIn}>{signingIn?"Entrando...":"Entrar no portal"}<ArrowRight/></button><button className="admin-reset-link" type="button" onClick={requestPasswordReset} disabled={resetting}>{resetting?"Enviando...":"Definir ou redefinir senha"}</button>{resetSent&&<div className="admin-login-notice"><Check/> E-mail enviado. Abra o link para criar sua senha.</div>}{loginError&&<div className="admin-login-error">{loginError}</div>}</form></section></main>;
+  if(!session)return <main className="admin-login"><section className="admin-login-story"><img src={logo} alt="CreatvOS"/><div><small>PORTAL DE PESQUISA</small><h1>As respostas<br/>que orientam <em>o produto.</em></h1><p>Acesso reservado para acompanhar os sinais, dores e oportunidades encontrados na pesquisa.</p></div><span>CREATVOS · BRASIL</span></section><section className="admin-login-form"><form onSubmit={signIn}><LockKeyhole/><small>ACESSO PROTEGIDO</small><h2>Entrar no portal</h2><p>Use seu e-mail e senha para acessar as respostas.</p><label>E-mail<input autoComplete="email" type="email" value={loginEmail} onChange={event=>setLoginEmail(event.target.value)} placeholder="seu@email.com" required/></label><label>Senha<div className="admin-password"><input autoComplete="current-password" type={showPassword?"text":"password"} value={password} onChange={event=>setPassword(event.target.value)} placeholder="Digite sua senha" required/><button type="button" onClick={()=>setShowPassword(value=>!value)} aria-label={showPassword?"Ocultar senha":"Mostrar senha"}>{showPassword?<EyeOff/>:<Eye/>}</button></div></label><button className="admin-login-submit" type="submit" disabled={!loginEmail||!password||signingIn}>{signingIn?"Entrando...":"Entrar no portal"}<ArrowRight/></button><button className="admin-reset-link" type="button" onClick={requestPasswordReset} disabled={resetting}>{resetting?"Enviando...":"Definir ou redefinir senha"}</button>{resetSent&&<div className="admin-login-notice"><Check/> E-mail enviado. Abra o link para criar sua senha.</div>}{loginError&&<div className="admin-login-error">{loginError}</div>}</form></section></main>;
   if(!authorized)return <main className="admin-denied"><LockKeyhole/><small>ACESSO NÃO AUTORIZADO</small><h1>Este e-mail não tem acesso ao portal.</h1><p>O acesso está reservado para {ADMIN_EMAIL}.</p><button onClick={()=>supabase.auth.signOut()}>Sair desta conta</button></main>;
 
   return <main className="admin-page">
