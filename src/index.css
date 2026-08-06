@@ -73,6 +73,7 @@
 .conversation-contact label{color:#797f82;font-size:9px}
 .conversation-contact label small{color:#515a5e}
 .conversation-contact input{font-family:var(--body);font-size:16px;margin-top:8px}
+.conversation-error{color:#e9a17d;font-family:var(--mono);font-size:9px!important;letter-spacing:.02em;margin:14px 0 0!important}
 
 @media(max-width:620px){.hero-tag{bottom:15px;width:140px}.conversation-header{grid-template-columns:1fr auto auto}.conversation-header>span{font-size:6px}.conversation-exit{height:34px;width:34px}.conversation-contact{grid-template-columns:1fr}.conversation-contact input{font-size:15px}}
 

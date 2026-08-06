@@ -131,6 +131,7 @@ const diagnosisSteps=[
   {key:"urgencia",label:"Urgência",question:"Quando faria sentido começar a resolver esse problema?",helper:"Isso nos ajuda a separar curiosidade de uma necessidade ativa.",options:["Agora","Nos próximos 30 dias","Neste trimestre","Mais para frente","Estou apenas pesquisando"]},
   {key:"piloto",label:"Primeiros testes",question:"Você toparia testar uma primeira versão conosco?",helper:"Os primeiros testes serão pequenos e próximos de quem vive o problema.",options:["Sim, quero participar","Talvez, quero entender melhor","Prefiro apenas acompanhar"]},
   {key:"contexto",label:"Contexto",question:"Se pudesse destravar uma coisa agora, o que mudaria?",helper:"Conte com suas palavras. Quanto mais concreto, melhor conseguimos entender.",long:true},
+  {key:"consentimento",label:"Privacidade",question:"Podemos guardar suas respostas e entrar em contato sobre o CreatvOS?",helper:"Seus dados serão usados somente para esta pesquisa e para os primeiros testes do produto.",options:["Sim, concordo"]},
 ];
 
 function formatBrazilPhone(value){
@@ -142,17 +143,44 @@ function formatBrazilPhone(value){
   return `(${digits.slice(0,2)}) ${digits.slice(2,7)}-${digits.slice(7)}`;
 }
 
+async function persistResearch(response){
+  const supabaseUrl=import.meta.env.VITE_SUPABASE_URL;
+  const publishableKey=import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  if(!supabaseUrl||!publishableKey)throw new Error("Supabase não configurado");
+  const request=await fetch(`${supabaseUrl}/rest/v1/research_responses`,{
+    method:"POST",
+    headers:{
+      apikey:publishableKey,
+      "Content-Type":"application/json",
+      Prefer:"return=minimal",
+    },
+    body:JSON.stringify({
+      id:response.id,
+      nome:response.nome,
+      empresa:response.marca,
+      telefone:response.telefone,
+      email:response.email,
+      origem:window.location.hostname,
+      respostas:response,
+    }),
+  });
+  if(!request.ok){const details=await request.text();throw new Error(details||"Não foi possível enviar a pesquisa")}
+}
+
 function ResearchPage(){const[step,setStep]=useState(0);const[sent,setSent]=useState(false);const[answers,setAnswers]=useState({nome:"",operacao:"",marca:"",dores:[],impacto:"",volume:"",contexto:"",email:"",whatsapp:""});const current=diagnosisSteps[step];const update=(key,value)=>setAnswers({...answers,[key]:value});const toggle=(option)=>update("dores",answers.dores.includes(option)?answers.dores.filter(item=>item!==option):[...answers.dores,option]);const canContinue=()=>current.key==="dores"?answers.dores.length>0:current.contact?/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(answers.email):String(answers[current.key]||"").trim().length>0;const next=(event)=>{event.preventDefault();if(!canContinue())return;if(step===diagnosisSteps.length-1)setSent(true);else setStep(step+1)};const summary=(item)=>{const value=answers[item.key];if(Array.isArray(value))return value.join(" · ");return value};return <main className="diagnosis-page"><header className="diagnosis-header"><a href="/"><img src={logo} alt="CreatvOS"/></a><span>{sent?"NA LISTA":`${String(step+1).padStart(2,"0")} / ${String(diagnosisSteps.length).padStart(2,"0")}`}</span><a href="/" aria-label="Voltar ao site"><X/></a></header>{sent?<section className="diagnosis-success"><span><Check/></span><small>RESPOSTA RECEBIDA</small><h1>Obrigado, {answers.nome}.<br/>Sua experiência agora faz parte da construção.</h1><p>Vamos considerar o cenário da {answers.marca} ao definir o produto. Avisaremos quando os primeiros testes forem abertos.</p><a href="/">Voltar para a página</a></section>:<div className="diagnosis-layout"><aside className="diagnosis-rail"><div><span>PESQUISA CREATVOS</span><h2>Antes de construir,<br/>queremos ouvir.</h2><p>8 perguntas sobre a realidade da sua operação.</p></div><div className="diagnosis-summary">{diagnosisSteps.slice(0,step).map(item=><div key={item.key}><span>{item.label}</span><p>{summary(item)}</p></div>)}</div><div className="diagnosis-wave">{Array.from({length:9},(_,index)=><i key={index}/>)}</div></aside><form className="diagnosis-stage" onSubmit={next}><div className="diagnosis-progress"><i style={{width:`${((step+1)/diagnosisSteps.length)*100}%`}}/></div><div className="diagnosis-copy" key={current.key}><span>{current.label}</span><h1>{current.question}</h1><p>{current.helper}</p></div><div className="diagnosis-answer">{current.options&&<div className="diagnosis-choices">{current.options.map(option=>{const selected=current.multiple?answers.dores.includes(option):answers[current.key]===option;return <button type="button" key={option} className={selected?"selected":""} onClick={()=>current.multiple?toggle(option):update(current.key,option)}><span>{option}</span><i>{selected?<Check/>:<ArrowRight/>}</i></button>})}</div>}{!current.options&&!current.contact&&<label>{current.long?<textarea autoFocus rows="4" value={answers[current.key]} onChange={event=>update(current.key,event.target.value)} placeholder="Escreva do seu jeito..."/>:<input autoFocus value={answers[current.key]} onChange={event=>update(current.key,event.target.value)} placeholder={current.key==="nome"?"Seu primeiro nome":"Nome da marca ou operação"}/>}</label>}{current.contact&&<div className="diagnosis-contact"><label>E-mail profissional<input autoFocus type="email" value={answers.email} onChange={event=>update("email",event.target.value)} placeholder="voce@empresa.com"/></label><label>WhatsApp <small>opcional</small><input type="tel" value={answers.whatsapp} onChange={event=>update("whatsapp",event.target.value)} placeholder="(00) 00000-0000"/></label></div>}</div><div className="diagnosis-actions"><button type="button" onClick={()=>setStep(Math.max(0,step-1))} disabled={step===0}><ArrowLeft/> Voltar</button><button type="submit" disabled={!canContinue()}>{step===diagnosisSteps.length-1?"Enviar respostas":"Continuar"}<ArrowRight/></button></div></form></div>}</main>}
 
 function ConversationalResearchPage(){
   const [step,setStep]=useState(0);
   const [sent,setSent]=useState(false);
-  const [answers,setAnswers]=useState({nome:"",marca:"",telefone:"",email:"",site:"",papel:"",decisao:"",operacao:"",publico:"",equipe:"",faturamento:"",catalogo:"",ticket:"",midia:"",canais:[],processo:"",ferramentas:[],volume:"",formatos:[],prazo:"",custoCriativo:"",dores:[],impacto:"",prioridade:"",prioridades:[],investimento:"",urgencia:"",piloto:"",contexto:""});
+  const [submitting,setSubmitting]=useState(false);
+  const [submitError,setSubmitError]=useState("");
+  const [responseId]=useState(()=>crypto.randomUUID());
+  const [answers,setAnswers]=useState({nome:"",marca:"",telefone:"",email:"",site:"",papel:"",decisao:"",operacao:"",publico:"",equipe:"",faturamento:"",catalogo:"",ticket:"",midia:"",canais:[],processo:"",ferramentas:[],volume:"",formatos:[],prazo:"",custoCriativo:"",dores:[],impacto:"",prioridade:"",prioridades:[],investimento:"",urgencia:"",piloto:"",contexto:"",consentimento:""});
   const current=diagnosisSteps[step];
   const update=(key,value)=>setAnswers(previous=>({...previous,[key]:value}));
   const toggle=(option)=>{const selected=answers[current.key]||[];update(current.key,selected.includes(option)?selected.filter(item=>item!==option):[...selected,option])};
   const canContinue=()=>current.multiple?(answers[current.key]||[]).length>0:current.key==="email"?/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(answers.email):current.key==="telefone"?answers.telefone.replace(/\D/g,"").length>=10:String(answers[current.key]||"").trim().length>0;
-  const next=(event)=>{event.preventDefault();if(!canContinue())return;if(step===diagnosisSteps.length-1){const response={...answers,respondidoEm:new Date().toISOString()};const saved=JSON.parse(localStorage.getItem("creatvos_research")||"[]");localStorage.setItem("creatvos_research",JSON.stringify([...saved,response]));setSent(true)}else setStep(value=>value+1)};
+  const next=async(event)=>{event.preventDefault();if(!canContinue()||submitting)return;if(step===diagnosisSteps.length-1){const response={...answers,id:responseId,respondidoEm:new Date().toISOString()};setSubmitting(true);setSubmitError("");try{await persistResearch(response);localStorage.removeItem("creatvos_research_pending");setSent(true)}catch(error){localStorage.setItem("creatvos_research_pending",JSON.stringify(response));setSubmitError("Não conseguimos enviar agora. Confira sua conexão e tente novamente.")}finally{setSubmitting(false)}}else setStep(value=>value+1)};
   return <main className="conversation-page">
     <header className="conversation-header">
       <div className="conversation-progress"><i style={{width:`${sent?100:((step+1)/diagnosisSteps.length)*100}%`}}/></div>
@@ -170,9 +198,10 @@ function ConversationalResearchPage(){
         {!current.options&&(current.long?<textarea autoFocus value={answers[current.key]} onChange={event=>update(current.key,event.target.value)} placeholder="Escreva do seu jeito..."/>:<input autoFocus type={current.type||"text"} inputMode={current.type==="tel"?"numeric":undefined} value={answers[current.key]} onChange={event=>update(current.key,current.key==="telefone"?formatBrazilPhone(event.target.value):event.target.value)} placeholder={current.placeholder||"Escreva aqui"}/>) }
         <div className="conversation-actions">
           {step>0&&<button className="question-back" type="button" onClick={()=>setStep(value=>value-1)}><ArrowLeft/> Voltar</button>}
-          <button className="question-next" type="submit" disabled={!canContinue()}>{step===diagnosisSteps.length-1?"Enviar respostas":"Continuar"}<ArrowRight/></button>
+          <button className="question-next" type="submit" disabled={!canContinue()||submitting}>{submitting?"Enviando...":step===diagnosisSteps.length-1?"Enviar respostas":"Continuar"}<ArrowRight/></button>
           <small>pressione Enter ↵</small>
         </div>
+        {submitError&&<p className="conversation-error" role="alert">{submitError}</p>}
       </form>
     </section>}
     {!sent&&<div className="conversation-foot">PESQUISA DE DESCOBERTA · CREATVOS</div>}
