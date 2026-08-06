@@ -1,4 +1,4 @@
-import React, { StrictMode, useEffect, useMemo, useRef, useState } from "react";
+import React, { StrictMode, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { ArrowLeft, ArrowRight, ArrowUp, Check, ChevronDown, Download, Eye, EyeOff, Inbox, Layers3, LockKeyhole, LogOut, Menu, MessageCircle, Play, Plus, RefreshCw, Search, WandSparkles, X, Zap } from "lucide-react";
 import logo from "./assets/logo.svg?url";
@@ -144,25 +144,13 @@ function formatBrazilPhone(value){
   return `(${digits.slice(0,2)}) ${digits.slice(2,7)}-${digits.slice(7)}`;
 }
 
-function researchRow(response,status){
-  return{
-    id:response.id,
-    nome:response.nome||"Resposta em andamento",
-    empresa:response.marca||"Não informado",
-    telefone:response.telefone||"Não informado",
-    email:response.email||"Não informado",
-    origem:window.location.hostname,
-    respostas:response,
-    status,
-  };
-}
-
-async function persistResearch(response,{update=false,status="concluida"}={}){
+async function persistResearch(response,{draftToken,complete=true}={}){
   if(!supabase)throw new Error("Supabase não configurado");
-  const row=researchRow(response,status);
-  const{error}=update
-    ?await supabase.from("research_responses").update(row).eq("id",response.id)
-    :await supabase.from("research_responses").insert(row);
+  const{error}=await supabase.rpc("save_research_response",{
+    p_payload:{...response,origem:window.location.hostname},
+    p_draft_token:draftToken,
+    p_complete:complete,
+  });
   if(error)throw error;
 }
 
@@ -174,14 +162,14 @@ function ConversationalResearchPage(){
   const [submitting,setSubmitting]=useState(false);
   const [submitError,setSubmitError]=useState("");
   const [responseId]=useState(()=>crypto.randomUUID());
-  const draftCreated=useRef(false);
+  const [draftToken]=useState(()=>`${crypto.randomUUID()}${crypto.randomUUID()}`);
   const [answers,setAnswers]=useState({nome:"",marca:"",telefone:"",email:"",site:"",papel:"",decisao:"",operacao:"",publico:"",equipe:"",faturamento:"",catalogo:"",ticket:"",midia:"",canais:[],processo:"",ferramentas:[],volume:"",formatos:[],prazo:"",custoCriativo:"",dores:[],impacto:"",prioridade:"",prioridades:[],investimento:"",urgencia:"",piloto:"",contexto:"",consentimento:""});
-  useEffect(()=>{const pending=localStorage.getItem("creatvos_research_pending");if(!pending)return;try{const saved=JSON.parse(pending);const response=saved.response||saved;persistResearch(response,{update:Boolean(saved.update)}).then(()=>localStorage.removeItem("creatvos_research_pending")).catch(()=>{})}catch{localStorage.removeItem("creatvos_research_pending")}},[]);
+  useEffect(()=>{const pending=localStorage.getItem("creatvos_research_pending");if(!pending)return;try{const saved=JSON.parse(pending);const response=saved.response||saved;persistResearch(response,{draftToken:saved.draftToken||draftToken,complete:true}).then(()=>localStorage.removeItem("creatvos_research_pending")).catch(()=>{})}catch{localStorage.removeItem("creatvos_research_pending")}},[draftToken]);
   const current=diagnosisSteps[step];
   const update=(key,value)=>setAnswers(previous=>({...previous,[key]:value}));
   const toggle=(option)=>{const selected=answers[current.key]||[];update(current.key,selected.includes(option)?selected.filter(item=>item!==option):[...selected,option])};
   const canContinue=()=>current.multiple?(answers[current.key]||[]).length>0:current.key==="email"?/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(answers.email):current.key==="telefone"?answers.telefone.replace(/\D/g,"").length>=10:String(answers[current.key]||"").trim().length>0;
-  const next=async(event)=>{event.preventDefault();if(!canContinue()||submitting)return;const finalStep=step===diagnosisSteps.length-1;const response={...answers,id:responseId,ultimaEtapa:step+1,totalEtapas:diagnosisSteps.length,atualizadoEm:new Date().toISOString(),...(finalStep?{respondidoEm:new Date().toISOString()}:{})};setSubmitting(true);setSubmitError("");try{await persistResearch(response,{update:draftCreated.current,status:finalStep?"concluida":"em_andamento"});draftCreated.current=true;if(finalStep){localStorage.removeItem("creatvos_research_pending");setSent(true)}else setStep(value=>value+1)}catch(error){if(finalStep)localStorage.setItem("creatvos_research_pending",JSON.stringify({response,update:draftCreated.current}));setSubmitError(finalStep?"Não conseguimos enviar agora. Confira sua conexão e tente novamente.":"Não conseguimos salvar esta etapa. Tente continuar novamente.")}finally{setSubmitting(false)}};
+  const next=async(event)=>{event.preventDefault();if(!canContinue()||submitting)return;const finalStep=step===diagnosisSteps.length-1;const response={...answers,id:responseId,ultimaEtapa:step+1,totalEtapas:diagnosisSteps.length,atualizadoEm:new Date().toISOString(),...(finalStep?{respondidoEm:new Date().toISOString()}:{})};setSubmitting(true);setSubmitError("");try{await persistResearch(response,{draftToken,complete:finalStep});if(finalStep){localStorage.removeItem("creatvos_research_pending");setSent(true)}else setStep(value=>value+1)}catch(error){if(finalStep)localStorage.setItem("creatvos_research_pending",JSON.stringify({response,draftToken}));setSubmitError(finalStep?"Não conseguimos enviar agora. Confira sua conexão e tente novamente.":"Não conseguimos salvar esta etapa. Tente continuar novamente.")}finally{setSubmitting(false)}};
   return <main className="conversation-page">
     <header className="conversation-header">
       <div className="conversation-progress"><i style={{width:`${sent?100:((step+1)/diagnosisSteps.length)*100}%`}}/></div>
