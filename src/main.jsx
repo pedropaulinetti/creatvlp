@@ -223,6 +223,11 @@ function AdminPortal(){
   const[password,setPassword]=useState("");
   const[showPassword,setShowPassword]=useState(false);
   const[signingIn,setSigningIn]=useState(false);
+  const[resetSent,setResetSent]=useState(false);
+  const[resetting,setResetting]=useState(false);
+  const[recovering,setRecovering]=useState(()=>window.location.hash.includes("type=recovery"));
+  const[newPassword,setNewPassword]=useState("");
+  const[confirmPassword,setConfirmPassword]=useState("");
   const[loginError,setLoginError]=useState("");
   const[responses,setResponses]=useState([]);
   const[loading,setLoading]=useState(false);
@@ -234,7 +239,7 @@ function AdminPortal(){
   useEffect(()=>{
     if(!supabase){setAuthReady(true);return}
     supabase.auth.getSession().then(({data})=>{setSession(data.session);setAuthReady(true)});
-    const{data:{subscription}}=supabase.auth.onAuthStateChange((_event,nextSession)=>{setSession(nextSession);setAuthReady(true)});
+    const{data:{subscription}}=supabase.auth.onAuthStateChange((event,nextSession)=>{if(event==="PASSWORD_RECOVERY")setRecovering(true);setSession(nextSession);setAuthReady(true)});
     return()=>subscription.unsubscribe();
   },[]);
 
@@ -273,6 +278,26 @@ function AdminPortal(){
     setSigningIn(false);
   };
 
+  const requestPasswordReset=async()=>{
+    if(!supabase||resetting)return;
+    setResetting(true);setLoginError("");
+    const{error}=await supabase.auth.resetPasswordForEmail(ADMIN_EMAIL,{redirectTo:`${window.location.origin}/admin`});
+    if(error)setLoginError("Não conseguimos enviar a definição de senha. Tente novamente em alguns minutos.");
+    else setResetSent(true);
+    setResetting(false);
+  };
+
+  const saveNewPassword=async(event)=>{
+    event.preventDefault();setLoginError("");
+    if(newPassword.length<8){setLoginError("A senha precisa ter pelo menos 8 caracteres.");return}
+    if(newPassword!==confirmPassword){setLoginError("As duas senhas precisam ser iguais.");return}
+    setResetting(true);
+    const{error}=await supabase.auth.updateUser({password:newPassword});
+    if(error)setLoginError("Não foi possível salvar a nova senha. Abra novamente o link recebido por e-mail.");
+    else{setRecovering(false);window.history.replaceState({},"","/admin")}
+    setResetting(false);
+  };
+
   const exportCsv=()=>{
     const keys=diagnosisSteps.map(item=>item.key);
     const header=["Data","Nome","Empresa","Telefone","E-mail",...keys.map(key=>answerLabels[key])];
@@ -282,7 +307,8 @@ function AdminPortal(){
   };
 
   if(!authReady)return <main className="admin-loading"><span/><p>Preparando o portal</p></main>;
-  if(!session)return <main className="admin-login"><section className="admin-login-story"><img src={logo} alt="CreatvOS"/><div><small>PORTAL DE PESQUISA</small><h1>As respostas<br/>que orientam <em>o produto.</em></h1><p>Acesso reservado para acompanhar os sinais, dores e oportunidades encontrados na pesquisa.</p></div><span>CREATVOS · BRASIL</span></section><section className="admin-login-form"><form onSubmit={signIn}><LockKeyhole/><small>ACESSO PROTEGIDO</small><h2>Entrar no portal</h2><p>Use seu e-mail e senha para acessar as respostas.</p><label>E-mail<input type="email" value={ADMIN_EMAIL} readOnly/></label><label>Senha<div className="admin-password"><input autoComplete="current-password" type={showPassword?"text":"password"} value={password} onChange={event=>setPassword(event.target.value)} placeholder="Digite sua senha" required/><button type="button" onClick={()=>setShowPassword(value=>!value)} aria-label={showPassword?"Ocultar senha":"Mostrar senha"}>{showPassword?<EyeOff/>:<Eye/>}</button></div></label><button className="admin-login-submit" type="submit" disabled={!password||signingIn}>{signingIn?"Entrando...":"Entrar no portal"}<ArrowRight/></button>{loginError&&<div className="admin-login-error">{loginError}</div>}</form></section></main>;
+  if(recovering&&session)return <main className="admin-login"><section className="admin-login-story"><img src={logo} alt="CreatvOS"/><div><small>NOVO ACESSO</small><h1>Uma senha sua.<br/>A pesquisa <em>protegida.</em></h1><p>Defina a senha que será usada nos próximos acessos ao portal.</p></div><span>CREATVOS · BRASIL</span></section><section className="admin-login-form"><form onSubmit={saveNewPassword}><LockKeyhole/><small>DEFINIR SENHA</small><h2>Crie sua senha</h2><p>Use pelo menos 8 caracteres. Depois de salvar, você entrará diretamente no portal.</p><label>Nova senha<div className="admin-password"><input autoComplete="new-password" type={showPassword?"text":"password"} value={newPassword} onChange={event=>setNewPassword(event.target.value)} placeholder="Mínimo de 8 caracteres" required/><button type="button" onClick={()=>setShowPassword(value=>!value)} aria-label={showPassword?"Ocultar senha":"Mostrar senha"}>{showPassword?<EyeOff/>:<Eye/>}</button></div></label><label>Confirmar senha<input autoComplete="new-password" type="password" value={confirmPassword} onChange={event=>setConfirmPassword(event.target.value)} placeholder="Digite novamente" required/></label><button className="admin-login-submit" type="submit" disabled={!newPassword||!confirmPassword||resetting}>{resetting?"Salvando...":"Salvar nova senha"}<ArrowRight/></button>{loginError&&<div className="admin-login-error">{loginError}</div>}</form></section></main>;
+  if(!session)return <main className="admin-login"><section className="admin-login-story"><img src={logo} alt="CreatvOS"/><div><small>PORTAL DE PESQUISA</small><h1>As respostas<br/>que orientam <em>o produto.</em></h1><p>Acesso reservado para acompanhar os sinais, dores e oportunidades encontrados na pesquisa.</p></div><span>CREATVOS · BRASIL</span></section><section className="admin-login-form"><form onSubmit={signIn}><LockKeyhole/><small>ACESSO PROTEGIDO</small><h2>Entrar no portal</h2><p>Use seu e-mail e senha para acessar as respostas.</p><label>E-mail<input type="email" value={ADMIN_EMAIL} readOnly/></label><label>Senha<div className="admin-password"><input autoComplete="current-password" type={showPassword?"text":"password"} value={password} onChange={event=>setPassword(event.target.value)} placeholder="Digite sua senha" required/><button type="button" onClick={()=>setShowPassword(value=>!value)} aria-label={showPassword?"Ocultar senha":"Mostrar senha"}>{showPassword?<EyeOff/>:<Eye/>}</button></div></label><button className="admin-login-submit" type="submit" disabled={!password||signingIn}>{signingIn?"Entrando...":"Entrar no portal"}<ArrowRight/></button><button className="admin-reset-link" type="button" onClick={requestPasswordReset} disabled={resetting}>{resetting?"Enviando...":"Definir ou redefinir senha"}</button>{resetSent&&<div className="admin-login-notice"><Check/> E-mail enviado. Abra o link para criar sua senha.</div>}{loginError&&<div className="admin-login-error">{loginError}</div>}</form></section></main>;
   if(!authorized)return <main className="admin-denied"><LockKeyhole/><small>ACESSO NÃO AUTORIZADO</small><h1>Este e-mail não tem acesso ao portal.</h1><p>O acesso está reservado para {ADMIN_EMAIL}.</p><button onClick={()=>supabase.auth.signOut()}>Sair desta conta</button></main>;
 
   return <main className="admin-page">
