@@ -7,13 +7,13 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { errors } from "./http.ts";
 import { chatStructured, generateImage } from "./openrouter.ts";
 import { directionsResponseSchema, copiesResponseSchema, briefSchema, type Brief } from "./schemas.ts";
-import { directionsPrompt, copiesPrompt, imagePrompt, pecaCompletaPrompt } from "./prompts.ts";
+import { directionsPrompt, copiesPrompt, imagePrompt } from "./prompts.ts";
 import { loadBrandMemory, loadConfirmedBrief } from "./memory.ts";
 import { openJob, completeJob, failJob, recordUsage, auditLog, chaveDosCaminhos } from "./jobs.ts";
 import { reserveCredits, confirmCredits, refundCredits } from "./credits.ts";
 import { uploadImage } from "./storage.ts";
 import { composicaoDaPeca } from "./composition.ts";
-import { carregarReferencias, assinarReferencia, segmentoDaMarca } from "./referencias.ts";
+import { carregarReferencias, segmentoDaMarca } from "./referencias.ts";
 import { planejarPecas, textoDaPeca, geracoesNecessarias } from "./pecas.ts";
 import { notify, notifyQuotaThreshold } from "./notify.ts";
 import { DEFAULT_IMAGE_QUALITY, estimatedImageCost, imageModelFor, MODELS, type ImageQuality } from "./config.ts";
@@ -345,8 +345,17 @@ export async function runImages(
       const copy = peca.copyId ? copyPorId.get(peca.copyId) ?? null : null;
       const texto = textoDaPeca(copy, direction, destaques);
 
+      /*
+       * O texto não é mais desenhado pelo modelo.
+       *
+       * A peça inteira gerada pela IA saía com o logo e o rótulo em rabisco, e
+       * sem conserto possível: errou o acento, gera tudo de novo. Agora o
+       * modelo entrega só a fotografia, e headline, subheadline, CTA e logo
+       * entram por cima, vetoriais, no layout fixo de `DEFAULT_LAYOUT` —
+       * logo no topo à esquerda, texto no rodapé, CTA em pílula.
+       */
       const composition = composicaoDaPeca({
-        templateKey: peca.referencia?.key ?? "peca-livre",
+        templateKey: "coluna",
         format: peca.formato,
         headline: texto.headline,
         subheadline: texto.subheadline,
@@ -362,61 +371,44 @@ export async function runImages(
 
       /*
        * A ordem das referências é a ordem da importância: a foto do produto
-       * primeiro, porque é o objeto que precisa ser reproduzido; a referência
-       * de layout depois, porque é a arquitetura; o estilo da marca por
-       * último. O teto de quatro é do próprio provedor.
+       * primeiro, porque é o objeto que precisa ser reproduzido com fidelidade;
+       * o estilo da marca depois, que é luz e clima. O teto de quatro é do
+       * próprio provedor, e a disputa é real: cada imagem a mais dilui a
+       * anterior.
+       *
+       * A referência de layout saiu daqui. Ela existia para o modelo desenhar a
+       * arquitetura do anúncio — e agora quem desenha a arquitetura é o canvas.
+       * Mandar um anúncio pronto junto de "não escreva nada" só convidava o
+       * modelo a redesenhar texto. As vagas que ela ocupava vão para o produto
+       * e para o estilo, que é o que a fotografia precisa.
        */
       const doProduto = await fotoDoProduto(admin, products, direction, texto.headline, produtoDoBriefing);
-      const daReferencia = peca.referencia
-        ? await assinarReferencia(admin, peca.referencia.storage_path)
-        : null;
+      const doEstiloCabem = doEstilo.slice(0, 4 - (doProduto ? 1 : 0));
 
-      /*
-       * O teto de quatro é do provedor, e a disputa é real: cada imagem a mais
-       * dilui a anterior. A foto do produto vem primeiro e nunca cede lugar —
-       * é o único anexo que o modelo precisa reproduzir, não interpretar. O
-       * estilo da marca fica com o que sobrar, no máximo dois.
-       */
-      const doEstiloCabem = doEstilo.slice(0, 4 - (doProduto ? 1 : 0) - (daReferencia ? 1 : 0));
-
-      const references = [doProduto, daReferencia, ...doEstiloCabem].filter(
+      const references = [doProduto, ...doEstiloCabem].filter(
         (url): url is string => Boolean(url),
       );
 
       const anexos = {
         produto: Boolean(doProduto),
-        layout: Boolean(daReferencia),
         estilo: doEstiloCabem.length,
       };
 
       const { image, usage } = await generateImage({
-        prompt: pecaCompletaPrompt(
-          {
-            estrutura: peca.referencia?.estrutura ?? "",
-            layoutAnexado: Boolean(daReferencia),
-            // A hipótese do caminho criativo, que é o que separa uma peça da outra.
-            cena: direction.visual_prompt ?? "",
-            headline: composition.headline,
-            subheadline: composition.subheadline,
-            cta: composition.cta,
-            price: composition.price,
-            bullets: composition.bullets,
-            palette: composition.palette,
-            typography: composition.typography,
-            format: peca.formato,
-          },
-          brand,
-          anexos,
-        ),
+        // A hipótese do caminho criativo é o que separa uma fotografia da outra.
+        prompt: imagePrompt(direction.visual_prompt ?? "", brand, peca.formato, {
+          produto: anexos.produto,
+          estilo: anexos.estilo,
+        }),
         references,
         quality,
       });
 
-      const generatedPath = await uploadImage(admin, {
+      const basePath = await uploadImage(admin, {
         bucket: "creative-assets",
         workspaceId: params.workspaceId,
         brandId: params.brandId,
-        resourceType: "peca",
+        resourceType: "base",
         base64: image.base64,
         mimeType: image.mimeType,
       });
@@ -432,12 +424,17 @@ export async function runImages(
           grupo_id: grupos.get(peca.ideia),
           // A referência que deu a estrutura fica registrada: é o que permite
           // descobrir depois qual layout converte.
-          template_key: peca.referencia?.key ?? "peca-livre",
+          // O layout é o do arquétipo que sobrepõe o texto, não o da referência.
+          template_key: "coluna",
           status: "revisao",
           format: peca.formato,
-          // Não há fotografia de fundo separada: a peça é a imagem inteira.
-          base_path: null,
-          generated_path: generatedPath,
+          /*
+           * A imagem é a fotografia de fundo; o texto vem por cima no canvas.
+           * `generated_path` fica nulo de propósito — é ele que o card usa para
+           * decidir entre mostrar o arquivo pronto e compor a peça.
+           */
+          base_path: basePath,
+          generated_path: null,
           composition: composition as never,
           visual_prompt: direction.visual_prompt,
           model: usage.model,

@@ -248,9 +248,20 @@ export function imagePrompt(
     "Enquadramento com espaço negativo natural na parte superior — parede, céu, superfície ou fundo desfocado — onde depois entra o texto.",
     "A fotografia preenche o quadro inteiro, de borda a borda, sem faixas, molduras, bordas brancas ou blocos de cor chapada.",
     "Iluminação natural, cores fiéis, acabamento editorial, alta nitidez.",
-    // Texto, logo e preço são compostos depois, de forma determinística: o que
-    // o modelo escreve na imagem sai torto e não dá para corrigir.
-    "IMPORTANTE: a imagem não pode conter nenhum texto, letra, número, palavra, logotipo, marca d'água, etiqueta de preço, selo, botão ou interface. Apenas a cena fotográfica.",
+    /*
+     * Texto, logo e preço são compostos depois, de forma determinística: o que
+     * o modelo escreve na imagem sai torto e não dá para corrigir.
+     *
+     * Com a foto do produto anexada, porém, a proibição não pode ser cega. O
+     * rótulo é parte do objeto — mandar "nenhuma letra" com uma embalagem
+     * rotulada na referência é dar uma ordem impossível, e o modelo resolve
+     * inventando rabisco em forma de letra no lugar do rótulo. Foi isso que
+     * saiu ilegível nas garrafas. A regra passa a separar o que é reproduzir
+     * do que é acrescentar.
+     */
+    referencias.produto
+      ? "IMPORTANTE: o rótulo faz parte do produto — reproduza-o exatamente como está na foto de referência: mesmas palavras, mesma tipografia, mesmas cores, mesma posição na embalagem, nítido e legível. Não o apague, não o borre, não o traduza nem invente letras no lugar dele. Fora o rótulo do próprio produto, a imagem não pode conter nenhum texto, número, logotipo, marca d'água, etiqueta de preço, selo, botão ou interface. Apenas a cena fotográfica."
+      : "IMPORTANTE: a imagem não pode conter nenhum texto, letra, número, palavra, logotipo, marca d'água, etiqueta de preço, selo, botão ou interface. Apenas a cena fotográfica.",
   ]
     .filter(Boolean)
     .join(" ");

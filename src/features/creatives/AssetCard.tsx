@@ -16,8 +16,6 @@ import { downloadNode, downloadUrl, safeFilename } from "@/features/creatives/ex
 import { ASSET_STATUS } from "@/features/creatives/status";
 import { Field, Input, Textarea, MonoLabel } from "@/components/ui/field";
 import { FORMATS, FORMAT_LABEL, type Format } from "@/lib/schemas";
-import { IMAGE_QUALITIES, IMAGE_QUALITY } from "@/lib/image-quality";
-import { formatUSD } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import type { Database } from "@/lib/database.types";
 
@@ -233,18 +231,21 @@ export function AssetCard({
                 <RefreshCw className="h-3.5 w-3.5" aria-hidden />
                 Reescrever o texto · sem crédito
               </DropdownMenuItem>
-              {IMAGE_QUALITIES.map((level) => (
-                <DropdownMenuItem
-                  key={level}
-                  onSelect={() =>
-                    actions.regenerate.mutate({ assetId: asset.id, mode: "peca", quality: level })
-                  }
-                >
-                  <Wand2 className="h-3.5 w-3.5" aria-hidden />
-                  Redesenhar a peça · {IMAGE_QUALITY[level].label.toLowerCase()} · 1 crédito ·{" "}
-                  {formatUSD(IMAGE_QUALITY[level].costUsd)}
-                </DropdownMenuItem>
-              ))}
+              {/*
+                * Um item, não três.
+                *
+                * O menu abria uma linha por nível de qualidade, cada uma com o
+                * custo em dólar — três formas de pedir a mesma coisa e um preço
+                * que não é o que o usuário paga. A unidade que ele conhece é o
+                * crédito: uma imagem, um crédito. Qual modelo atende é decisão
+                * do servidor.
+                */}
+              <DropdownMenuItem
+                onSelect={() => actions.regenerate.mutate({ assetId: asset.id, mode: "imagem" })}
+              >
+                <Wand2 className="h-3.5 w-3.5" aria-hidden />
+                Redesenhar a fotografia · 1 crédito
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem tone="danger" onSelect={() => actions.softDelete.mutate([asset.id])}>
                 <Trash2 className="h-3.5 w-3.5" aria-hidden />

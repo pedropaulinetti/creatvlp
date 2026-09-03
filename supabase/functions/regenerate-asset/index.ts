@@ -109,6 +109,12 @@ export const handler = serveJson(async (request) => {
         // até a exclusão definitiva do criativo.
         update.base_path = basePath;
         update.render_path = null;
+        /*
+         * Criativo antigo, desenhado inteiro pelo modelo, tem `generated_path`
+         * — e é ele que o card prefere mostrar. Sem zerar aqui, redesenhar a
+         * fotografia não mudava nada na tela: a peça velha continuava por cima.
+         */
+        update.generated_path = null;
         update.visual_prompt = visualPrompt;
         update.model = usage.model;
         update.cost_usd = Number(asset.cost_usd ?? 0) + usage.costUsd;

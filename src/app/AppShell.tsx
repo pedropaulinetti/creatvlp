@@ -14,7 +14,7 @@ import {
   Settings,
   Gauge,
 } from "lucide-react";
-import { Logo } from "@/components/Logo";
+import { Logo, LogoMark } from "@/components/Logo";
 import { BrandSwitcher } from "@/app/BrandSwitcher";
 import { Button } from "@/components/ui/button";
 import {
@@ -207,7 +207,7 @@ export function AppShell() {
       >
         <div className={cn("px-2 pb-[22px] pt-1", collapsed && "px-0 text-center")}>
           <NavLink to="/app" aria-label="CreatvOS, ir para o início">
-            {collapsed ? <Logo height={16} className="mx-auto max-w-[40px] object-left object-cover" /> : <Logo />}
+            {collapsed ? <LogoMark height={18} className="mx-auto" /> : <Logo />}
           </NavLink>
         </div>
 

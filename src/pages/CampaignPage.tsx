@@ -22,14 +22,6 @@ import { useWorkspace } from "@/features/workspace/WorkspaceProvider";
 import { callFunction, functionErrorMessage } from "@/lib/functions";
 import { briefSchema, FORMATS, FORMAT_LABEL, type Format } from "@/lib/schemas";
 import { available, canAfford, quotaMessage } from "@/lib/quotas";
-import {
-  IMAGE_QUALITIES,
-  IMAGE_QUALITY,
-  DEFAULT_IMAGE_QUALITY,
-  estimatedCost,
-  type ImageQuality,
-} from "@/lib/image-quality";
-import { formatUSD } from "@/lib/utils";
 
 export default function CampaignPage() {
   const { campaignId } = useParams<{ campaignId: string }>();
@@ -44,7 +36,6 @@ export default function CampaignPage() {
   const [selected, setSelected] = React.useState<string[]>([]);
   const [imageDialog, setImageDialog] = React.useState(false);
   const [formats, setFormats] = React.useState<Format[]>(["4:5"]);
-  const [quality, setQuality] = React.useState<ImageQuality>(DEFAULT_IMAGE_QUALITY);
   const [quantidade, setQuantidade] = React.useState(3);
   const [progresso, setProgresso] = React.useState("");
   /* Layouts escolhidos à mão. Vazio: o sistema varia sozinho pelo acervo. */
@@ -186,7 +177,6 @@ export default function CampaignPage() {
           quantidade: doLote,
           reference_keys: layouts,
           lote: indice,
-          quality,
         });
 
         geradas += result.assets.length;
@@ -578,35 +568,6 @@ export default function CampaignPage() {
 
             <Divider />
 
-            <div className="flex flex-col gap-2.5">
-              <MonoLabel>Qualidade da imagem</MonoLabel>
-              <div className="flex flex-col gap-2">
-                {IMAGE_QUALITIES.map((level) => (
-                  <button
-                    key={level}
-                    type="button"
-                    onClick={() => setQuality(level)}
-                    aria-pressed={quality === level}
-                    className={`flex flex-col gap-0.5 rounded-[10px] border px-3.5 py-2.5 text-left transition-colors ${
-                      quality === level ? "border-accent bg-accent-soft" : "border-line hover:border-line-contrast"
-                    }`}
-                  >
-                    <span className="flex items-baseline gap-2">
-                      <span className="text-[13.5px] text-ink">{IMAGE_QUALITY[level].label}</span>
-                      <span className="ml-auto font-mono text-[11.5px] text-ink-2">
-                        {formatUSD(IMAGE_QUALITY[level].costUsd)} por imagem
-                      </span>
-                    </span>
-                    <span className="text-[12px] leading-relaxed text-ink-muted">
-                      {IMAGE_QUALITY[level].description}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <Divider />
-
             <dl className="flex flex-col gap-2.5">
               <Row
                 label="Peças entregues"
@@ -616,8 +577,7 @@ export default function CampaignPage() {
                     : `${quantidade} ${quantidade === 1 ? "peça" : "peças"}`
                 }
               />
-              <Row label="Créditos consumidos" value={`${geracoes} — um por desenho`} />
-              <Row label="Custo estimado" value={formatUSD(estimatedCost(quality, geracoes))} />
+              <Row label="Créditos consumidos" value={`${geracoes} — uma imagem, um crédito`} />
               <Row
                 label="Restam no ciclo"
                 value={imagesLeft === null ? "—" : `${imagesLeft} ${imagesLeft === 1 ? "imagem" : "imagens"}`}
