@@ -1,11 +1,10 @@
-import React, { StrictMode, useEffect, useMemo, useState } from "react";
-import { createRoot } from "react-dom/client";
-import { ArrowLeft, ArrowRight, ArrowUp, Check, ChevronDown, Download, Eye, EyeOff, Inbox, Layers3, LockKeyhole, LogOut, Menu, MessageCircle, Play, Plus, RefreshCw, Search, WandSparkles, X, Zap } from "lucide-react";
-import logo from "./assets/logo.svg?url";
-import cityBridge from "./assets/hero-city.png";
-import tag from "./assets/TAG.svg?url";
-import { supabase } from "./lib/supabase";
-import "./index.css";
+import React, { useEffect, useMemo, useState } from "react";
+import { ArrowLeft, ArrowRight, Check, Layers3, MessageCircle, WandSparkles, X, Zap } from "lucide-react";
+import logo from "../assets/logo.svg?url";
+import cityBridge from "../assets/hero-city.png";
+import tag from "../assets/TAG.svg?url";
+import { supabase } from "../lib/supabase";
+import "../index.css";
 
 function SoftButton({ children, light = false, onClick, type = "button", className = "" }) {
   return <button type={type} onClick={onClick} className={`soft-button ${light ? "light" : ""} ${className}`}>{children}</button>;
@@ -197,123 +196,6 @@ function ConversationalResearchPage(){
   </main>
 }
 
-const ADMIN_EMAIL="pedro@startu.com.br";
-const answerLabels=Object.fromEntries(diagnosisSteps.map(item=>[item.key,item.label]));
-
-function csvValue(value){
-  const text=Array.isArray(value)?value.join("; "):String(value??"");
-  return `"${text.replaceAll('"','""')}"`;
-}
-
-function AdminPortal(){
-  const[session,setSession]=useState(null);
-  const[authReady,setAuthReady]=useState(false);
-  const[loginEmail,setLoginEmail]=useState("");
-  const[password,setPassword]=useState("");
-  const[showPassword,setShowPassword]=useState(false);
-  const[signingIn,setSigningIn]=useState(false);
-  const[resetSent,setResetSent]=useState(false);
-  const[resetting,setResetting]=useState(false);
-  const[recovering,setRecovering]=useState(()=>window.location.hash.includes("type=recovery"));
-  const[newPassword,setNewPassword]=useState("");
-  const[confirmPassword,setConfirmPassword]=useState("");
-  const[loginError,setLoginError]=useState("");
-  const[responses,setResponses]=useState([]);
-  const[loading,setLoading]=useState(false);
-  const[dataError,setDataError]=useState("");
-  const[query,setQuery]=useState("");
-  const[pilotFilter,setPilotFilter]=useState("todos");
-  const[selected,setSelected]=useState(null);
-
-  useEffect(()=>{
-    if(!supabase){setAuthReady(true);return}
-    supabase.auth.getSession().then(({data})=>{setSession(data.session);setAuthReady(true)});
-    const{data:{subscription}}=supabase.auth.onAuthStateChange((event,nextSession)=>{if(event==="PASSWORD_RECOVERY")setRecovering(true);setSession(nextSession);setAuthReady(true)});
-    return()=>subscription.unsubscribe();
-  },[]);
-
-  const authorized=session?.user?.email?.toLowerCase()===ADMIN_EMAIL;
-  const loadResponses=async()=>{
-    if(!authorized||!supabase)return;
-    setLoading(true);setDataError("");
-    const{data,error}=await supabase.from("research_responses").select("*").order("created_at",{ascending:false});
-    if(error)setDataError("Não foi possível carregar as respostas. Confira se a regra de acesso do portal foi aplicada no Supabase.");
-    else setResponses(data||[]);
-    setLoading(false);
-  };
-
-  useEffect(()=>{if(authorized)loadResponses()},[authorized]);
-
-  const filtered=useMemo(()=>responses.filter(item=>{
-    const term=query.trim().toLowerCase();
-    const matchesSearch=!term||[item.nome,item.empresa,item.email,item.telefone].some(value=>String(value||"").toLowerCase().includes(term));
-    const wantsPilot=item.respostas?.piloto==="Sim, quero participar";
-    const matchesPilot=pilotFilter==="todos"||(pilotFilter==="piloto"?wantsPilot:!wantsPilot);
-    return matchesSearch&&matchesPilot;
-  }),[responses,query,pilotFilter]);
-
-  const metrics=useMemo(()=>({
-    total:responses.length,
-    pilot:responses.filter(item=>item.respostas?.piloto==="Sim, quero participar").length,
-    urgent:responses.filter(item=>item.respostas?.urgencia==="Agora").length,
-    active:responses.filter(item=>!["Ainda não investe",undefined].includes(item.respostas?.midia)).length,
-  }),[responses]);
-
-  const signIn=async(event)=>{
-    event.preventDefault();setLoginError("");setSigningIn(true);
-    if(!supabase){setLoginError("As variáveis do Supabase não estão configuradas.");setSigningIn(false);return}
-    const{error}=await supabase.auth.signInWithPassword({email:loginEmail.trim().toLowerCase(),password});
-    if(error)setLoginError("E-mail ou senha incorretos. Confira os dados e tente novamente.");
-    setSigningIn(false);
-  };
-
-  const requestPasswordReset=async()=>{
-    if(!supabase||resetting)return;
-    setResetting(true);setLoginError("");
-    const email=loginEmail.trim().toLowerCase();
-    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){setLoginError("Digite um e-mail válido para definir a senha.");setResetting(false);return}
-    const{error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo:`${window.location.origin}/admin`});
-    if(error)setLoginError("Não conseguimos enviar a definição de senha. Tente novamente em alguns minutos.");
-    else setResetSent(true);
-    setResetting(false);
-  };
-
-  const saveNewPassword=async(event)=>{
-    event.preventDefault();setLoginError("");
-    if(newPassword.length<8){setLoginError("A senha precisa ter pelo menos 8 caracteres.");return}
-    if(newPassword!==confirmPassword){setLoginError("As duas senhas precisam ser iguais.");return}
-    setResetting(true);
-    const{error}=await supabase.auth.updateUser({password:newPassword});
-    if(error)setLoginError("Não foi possível salvar a nova senha. Abra novamente o link recebido por e-mail.");
-    else{setRecovering(false);window.history.replaceState({},"","/admin")}
-    setResetting(false);
-  };
-
-  const exportCsv=()=>{
-    const keys=diagnosisSteps.map(item=>item.key);
-    const header=["Data","Nome","Empresa","Telefone","E-mail",...keys.map(key=>answerLabels[key])];
-    const rows=filtered.map(item=>[new Date(item.created_at).toLocaleString("pt-BR"),item.nome,item.empresa,item.telefone,item.email,...keys.map(key=>item.respostas?.[key])]);
-    const blob=new Blob([[header,...rows].map(row=>row.map(csvValue).join(",")).join("\n")],{type:"text/csv;charset=utf-8"});
-    const href=URL.createObjectURL(blob);const link=document.createElement("a");link.href=href;link.download=`creatvos-respostas-${new Date().toISOString().slice(0,10)}.csv`;link.click();URL.revokeObjectURL(href);
-  };
-
-  if(!authReady)return <main className="admin-loading"><span/><p>Preparando o portal</p></main>;
-  if(recovering&&session)return <main className="admin-login"><section className="admin-login-story"><img src={logo} alt="CreatvOS"/><div><small>NOVO ACESSO</small><h1>Uma senha sua.<br/>A pesquisa <em>protegida.</em></h1><p>Defina a senha que será usada nos próximos acessos ao portal.</p></div><span>CREATVOS · BRASIL</span></section><section className="admin-login-form"><form onSubmit={saveNewPassword}><LockKeyhole/><small>DEFINIR SENHA</small><h2>Crie sua senha</h2><p>Use pelo menos 8 caracteres. Depois de salvar, você entrará diretamente no portal.</p><label>Nova senha<div className="admin-password"><input autoComplete="new-password" type={showPassword?"text":"password"} value={newPassword} onChange={event=>setNewPassword(event.target.value)} placeholder="Mínimo de 8 caracteres" required/><button type="button" onClick={()=>setShowPassword(value=>!value)} aria-label={showPassword?"Ocultar senha":"Mostrar senha"}>{showPassword?<EyeOff/>:<Eye/>}</button></div></label><label>Confirmar senha<input autoComplete="new-password" type="password" value={confirmPassword} onChange={event=>setConfirmPassword(event.target.value)} placeholder="Digite novamente" required/></label><button className="admin-login-submit" type="submit" disabled={!newPassword||!confirmPassword||resetting}>{resetting?"Salvando...":"Salvar nova senha"}<ArrowRight/></button>{loginError&&<div className="admin-login-error">{loginError}</div>}</form></section></main>;
-  if(!session)return <main className="admin-login"><section className="admin-login-story"><img src={logo} alt="CreatvOS"/><div><small>PORTAL DE PESQUISA</small><h1>As respostas<br/>que orientam <em>o produto.</em></h1><p>Acesso reservado para acompanhar os sinais, dores e oportunidades encontrados na pesquisa.</p></div><span>CREATVOS · BRASIL</span></section><section className="admin-login-form"><form onSubmit={signIn}><LockKeyhole/><small>ACESSO PROTEGIDO</small><h2>Entrar no portal</h2><p>Use seu e-mail e senha para acessar as respostas.</p><label>E-mail<input autoComplete="email" type="email" value={loginEmail} onChange={event=>setLoginEmail(event.target.value)} placeholder="seu@email.com" required/></label><label>Senha<div className="admin-password"><input autoComplete="current-password" type={showPassword?"text":"password"} value={password} onChange={event=>setPassword(event.target.value)} placeholder="Digite sua senha" required/><button type="button" onClick={()=>setShowPassword(value=>!value)} aria-label={showPassword?"Ocultar senha":"Mostrar senha"}>{showPassword?<EyeOff/>:<Eye/>}</button></div></label><button className="admin-login-submit" type="submit" disabled={!loginEmail||!password||signingIn}>{signingIn?"Entrando...":"Entrar no portal"}<ArrowRight/></button><button className="admin-reset-link" type="button" onClick={requestPasswordReset} disabled={resetting}>{resetting?"Enviando...":"Definir ou redefinir senha"}</button>{resetSent&&<div className="admin-login-notice"><Check/> E-mail enviado. Abra o link para criar sua senha.</div>}{loginError&&<div className="admin-login-error">{loginError}</div>}</form></section></main>;
-  if(!authorized)return <main className="admin-denied"><LockKeyhole/><small>ACESSO NÃO AUTORIZADO</small><h1>Este e-mail não tem acesso ao portal.</h1><p>O acesso está reservado para {ADMIN_EMAIL}.</p><button onClick={()=>supabase.auth.signOut()}>Sair desta conta</button></main>;
-
-  return <main className="admin-page">
-    <header className="admin-topbar"><a href="/"><img src={logo} alt="CreatvOS"/></a><div><span>PORTAL DE PESQUISA</span><i>ACESSO PRIVADO</i></div><nav><button onClick={loadResponses} title="Atualizar"><RefreshCw/></button><button onClick={exportCsv} disabled={!filtered.length}><Download/><span>Exportar CSV</span></button><button onClick={()=>supabase.auth.signOut()} title="Sair"><LogOut/></button></nav></header>
-    <section className="admin-intro"><div><small>DESCOBERTA CONTÍNUA</small><h1>O que o mercado<br/>está tentando <em>nos dizer.</em></h1></div><p>Um lugar para encontrar padrões nas respostas e decidir o que merece ser construído primeiro.</p></section>
-    <section className="admin-metrics"><article><span>TOTAL DE RESPOSTAS</span><strong>{metrics.total}</strong><small>pessoas ouvidas</small></article><article><span>QUEREM TESTAR</span><strong>{metrics.pilot}</strong><small>interesse no piloto</small></article><article><span>PRECISAM AGORA</span><strong>{metrics.urgent}</strong><small>urgência declarada</small></article><article><span>JÁ INVESTEM</span><strong>{metrics.active}</strong><small>operações com mídia</small></article></section>
-    <section className="admin-board"><div className="admin-controls"><label><Search/><input value={query} onChange={event=>setQuery(event.target.value)} placeholder="Buscar nome, empresa ou e-mail"/></label><select value={pilotFilter} onChange={event=>setPilotFilter(event.target.value)}><option value="todos">Todos os perfis</option><option value="piloto">Quer participar do piloto</option><option value="outros">Demais respostas</option></select><span>{filtered.length} {filtered.length===1?"resposta":"respostas"}</span></div>
-      <div className="admin-table-head"><span>CONTATO</span><span>OPERAÇÃO</span><span>INVESTIMENTO</span><span>SINAL</span><span>DATA</span><span/></div>
-      <div className="admin-response-list">{loading?<div className="admin-empty"><RefreshCw/><h3>Carregando respostas</h3></div>:dataError?<div className="admin-empty"><LockKeyhole/><h3>{dataError}</h3></div>:filtered.length?filtered.map(item=><button className="admin-response-row" key={item.id} onClick={()=>setSelected(item)}><span><b>{item.nome||"Sem nome"}</b><small>{item.email}</small></span><span><b>{item.empresa||"Não informada"}</b><small>{item.respostas?.operacao||"Sem categoria"}</small></span><span><b>{item.respostas?.investimento||"Não informado"}</b><small>{item.respostas?.midia||"Mídia não informada"}</small></span><span className={item.respostas?.piloto==="Sim, quero participar"?"admin-signal hot":"admin-signal"}>{item.respostas?.piloto==="Sim, quero participar"?"QUER TESTAR":"ACOMPANHAR"}</span><time>{new Date(item.created_at).toLocaleDateString("pt-BR")}</time><Eye/></button>):<div className="admin-empty"><Inbox/><h3>Nenhuma resposta encontrada</h3><p>Ajuste a busca ou aguarde novas respostas.</p></div>}</div>
-    </section>
-    {selected&&<div className="admin-drawer-backdrop" onClick={()=>setSelected(null)}><aside className="admin-drawer" onClick={event=>event.stopPropagation()}><header><div><small>RESPOSTA COMPLETA</small><h2>{selected.nome}</h2><p>{selected.empresa} · {selected.email}</p></div><button onClick={()=>setSelected(null)}><X/></button></header><div className="admin-answer-list">{diagnosisSteps.map(item=>{const value=selected.respostas?.[item.key];return <article key={item.key}><span>{item.label}</span><p>{Array.isArray(value)?value.join(" · "):value||"Não informado"}</p></article>})}</div></aside></div>}
-  </main>;
-}
-
 function App(){const join=()=>window.location.assign("/pesquisa");return <><Header onJoin={join}/><Hero onJoin={join}/></>}
-const page=window.location.pathname.replace(/\/$/,"");
-createRoot(document.getElementById("root")).render(<StrictMode>{page==="/pesquisa"?<ConversationalResearchPage/>:page==="/admin"?<AdminPortal/>:<App/>}</StrictMode>);
+
+export { App as LandingPage, ConversationalResearchPage, diagnosisSteps };

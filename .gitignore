@@ -7,3 +7,15 @@ dist
 !.env.example
 .vercel
 supabase/.temp
+deno.lock
+
+# saídas de teste
+test-results
+playwright-report
+coverage
+
+# Material de origem das referências de layout.
+# As 241 imagens já vivem no bucket layout-references do Supabase, que é de onde
+# o app lê. Aqui são anúncios de outras marcas: 81 MB que não pertencem a um
+# repositório público e que nada em produção abre.
+Modelo de Criativos/

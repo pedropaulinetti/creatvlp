@@ -1,0 +1,203 @@
+/* CreatvOS — design system do app (/login, /app, /admin).
+   Tailwind v4 sem preflight: o CSS da landing legada continua intacto. */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+@theme {
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "DM Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* superfícies — papel quente */
+  --color-canvas: #eeeae3;
+  --color-paper: #f4f1ea;
+  --color-surface: #fffdfa;
+  --color-card: #ffffff;
+  --color-sunken: #f5f1ea;
+  --color-hover: #eae5db;
+  --color-active: #e7e2d8;
+
+  /* linhas */
+  --color-line-soft: #f0ece4;
+  --color-line: #e7e2d8;
+  --color-line-strong: #e0dacf;
+  --color-line-contrast: #d3ccc0;
+
+  /* texto */
+  --color-ink: #171412;
+  --color-ink-2: #55504a;
+  --color-ink-muted: #7c7469;
+  --color-ink-faint: #a29a8d;
+
+  /* acentos */
+  --color-accent: #b4623a;
+  --color-accent-soft: #f3e6de;
+  --color-accent-ink: #8f4a29;
+  --color-clay: #8a6a42;
+  --color-positive: #4f6f4a;
+  --color-positive-soft: #e8efe5;
+  --color-warning: #9a6f24;
+  --color-warning-soft: #f6eeda;
+  --color-danger: #96412f;
+  --color-danger-soft: #f7e6e2;
+
+  --radius-sharp: 6px;
+  --radius-xs: 7px;
+  --radius-sm: 8px;
+  --radius-md: 9px;
+  --radius-lg: 11px;
+  --radius-xl: 12px;
+  --radius-2xl: 14px;
+  --radius-3xl: 16px;
+
+  --shadow-raise: 0 1px 2px rgb(23 20 18 / 0.04), 0 6px 18px rgb(23 20 18 / 0.05);
+  --shadow-pop: 0 10px 34px rgb(23 20 18 / 0.12), 0 2px 6px rgb(23 20 18 / 0.06);
+
+  --tracking-mono: 0.12em;
+}
+
+@layer base {
+  /* Só o app assume o fundo claro. A landing legada mantém o tema escuro dela. */
+  html[data-surface="app"],
+  html[data-surface="app"] body {
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    margin: 0;
+    scroll-behavior: auto;
+  }
+
+  html[data-surface="app"] *,
+  html[data-surface="app"] *::before,
+  html[data-surface="app"] *::after {
+    box-sizing: border-box;
+  }
+
+  /* Reset mínimo. O preflight do Tailwind fica desligado para não afetar a
+     landing legada, então o que ele faria é reproduzido aqui, escopado ao app. */
+  html[data-surface="app"] button,
+  html[data-surface="app"] input,
+  html[data-surface="app"] textarea,
+  html[data-surface="app"] select {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 0 solid var(--color-line);
+    border-radius: 0;
+    margin: 0;
+    padding: 0;
+    letter-spacing: inherit;
+  }
+
+  html[data-surface="app"] button {
+    cursor: pointer;
+    text-align: inherit;
+  }
+
+  html[data-surface="app"] button:disabled {
+    cursor: default;
+  }
+
+  html[data-surface="app"] a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  html[data-surface="app"] h1,
+  html[data-surface="app"] h2,
+  html[data-surface="app"] h3,
+  html[data-surface="app"] h4,
+  html[data-surface="app"] p,
+  html[data-surface="app"] figure,
+  html[data-surface="app"] blockquote,
+  html[data-surface="app"] dl,
+  html[data-surface="app"] dd,
+  html[data-surface="app"] ol,
+  html[data-surface="app"] ul {
+    margin: 0;
+    font-size: inherit;
+    font-weight: inherit;
+  }
+
+  html[data-surface="app"] ol,
+  html[data-surface="app"] ul {
+    padding: 0;
+    list-style: none;
+  }
+
+  html[data-surface="app"] img,
+  html[data-surface="app"] svg,
+  html[data-surface="app"] video,
+  html[data-surface="app"] canvas {
+    display: block;
+    max-width: 100%;
+  }
+
+  html[data-surface="app"] table {
+    border-collapse: collapse;
+  }
+
+  html[data-surface="app"] hr {
+    border-top-width: 1px;
+    border-color: var(--color-line-soft);
+  }
+
+  html[data-surface="app"] [hidden] {
+    display: none !important;
+  }
+
+  html[data-surface="app"] :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  html[data-surface="app"] ::selection {
+    background: var(--color-accent-soft);
+    color: var(--color-accent-ink);
+  }
+}
+
+@layer components {
+  /* rótulo monoespaçado — a "etiqueta de mesa de teste" do produto */
+  .label-mono {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: var(--tracking-mono);
+    text-transform: uppercase;
+    color: var(--color-ink-faint);
+  }
+
+  .scroll-slim {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-contrast) transparent;
+  }
+  .scroll-slim::-webkit-scrollbar { width: 9px; height: 9px; }
+  .scroll-slim::-webkit-scrollbar-thumb {
+    background: var(--color-line-contrast);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+  }
+
+  /* hachura das peças em produção (mesma textura do protótipo) */
+  .hatch {
+    background-image: repeating-linear-gradient(
+      -45deg,
+      var(--color-line-soft) 0 6px,
+      var(--color-paper) 6px 12px
+    );
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-surface="app"] *,
+  html[data-surface="app"] *::before,
+  html[data-surface="app"] *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

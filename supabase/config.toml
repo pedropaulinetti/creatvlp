@@ -1,0 +1,32 @@
+project_id = "hqmhxoismhzcrytkqdpi"
+
+[functions.analyze-brand]
+verify_jwt = true
+
+[functions.campaign-chat]
+verify_jwt = true
+
+[functions.generate-directions]
+verify_jwt = true
+
+[functions.generate-copies]
+verify_jwt = true
+
+[functions.generate-image]
+verify_jwt = true
+
+[functions.regenerate-asset]
+verify_jwt = true
+
+[functions.record-performance]
+verify_jwt = true
+
+[functions.recommend-next-test]
+verify_jwt = true
+
+[functions.admin-retry-job]
+verify_jwt = true
+
+# O cron chama sem JWT de usuário; a função valida o segredo/service role por conta própria.
+[functions.run-routines]
+verify_jwt = false
