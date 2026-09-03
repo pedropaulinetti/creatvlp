@@ -21,9 +21,29 @@ export const OPENROUTER = {
 export const MODELS = {
   /** Classificação, resumo, extração de briefing, reformatação, conversa simples. */
   fast: env("OPENROUTER_FAST_MODEL", "openai/gpt-5.6-luna"),
-  /** Posicionamento, ângulos, hooks, copies, recomendações. */
-  strategy: env("OPENROUTER_STRATEGY_MODEL", "anthropic/claude-sonnet-5"),
-  strategyFallback: env("OPENROUTER_STRATEGY_FALLBACK", "anthropic/claude-sonnet-4.6"),
+  /*
+   * Posicionamento, ângulos, hooks, copies, recomendações.
+   *
+   * Escolhido por custo E por tempo. Medido em 02/09/2026 na carga real —
+   * 3 caminhos e depois 3 copies estruturadas por caminho:
+   *
+   *                      direções   copies   custo/chamada
+   *   gemini-2.5-flash      7,7s      8,9s   US$ 0,000874
+   *   qwen3-235b-a22b      34,2s     30,2s   US$ 0,000119
+   *   deepseek-v3.2        38,4s     38,2s   US$ 0,000178
+   *   claude-sonnet-5          —         —   US$ 0,005086
+   *
+   * O qwen é 7 vezes mais barato e foi a primeira escolha, medindo só custo e
+   * qualidade em saídas curtas. Na carga real ele leva 4 vezes mais tempo e
+   * estoura o teto de 150 segundos da Edge Function: a campanha morria no meio
+   * e deixava job órfão. Latência aqui não é conforto — é a diferença entre
+   * funcionar e não funcionar.
+   *
+   * O gemini continua 6 vezes mais barato que o Sonnet. O qwen fica de reserva:
+   * mais lento, mas de outro fornecedor e capaz de entregar quando há tempo.
+   */
+  strategy: env("OPENROUTER_STRATEGY_MODEL", "google/gemini-2.5-flash"),
+  strategyFallback: env("OPENROUTER_STRATEGY_FALLBACK", "qwen/qwen3-235b-a22b-2507"),
 } as const;
 
 /**

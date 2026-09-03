@@ -10,6 +10,7 @@
  *   cd supabase/functions && deno run --allow-net --allow-env _e2e/server.ts
  */
 import { handler as analyzeBrand } from "../analyze-brand/index.ts";
+import { handler as interpretBrand } from "../interpret-brand/index.ts";
 import { handler as campaignChat } from "../campaign-chat/index.ts";
 import { handler as generateDirections } from "../generate-directions/index.ts";
 import { handler as generateCopies } from "../generate-copies/index.ts";
@@ -22,6 +23,7 @@ import { handler as runRoutines } from "../run-routines/index.ts";
 
 const ROUTES: Record<string, (request: Request) => Promise<Response>> = {
   "analyze-brand": analyzeBrand,
+  "interpret-brand": interpretBrand,
   "campaign-chat": campaignChat,
   "generate-directions": generateDirections,
   "generate-copies": generateCopies,

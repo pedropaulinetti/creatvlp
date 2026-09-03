@@ -19,27 +19,142 @@ export const briefSchema = z.object({
   primary_metric: z.string().trim().min(1),
 });
 
+/**
+ * Uma pergunta da entrevista de campanha, com respostas prontas para clicar.
+ *
+ * As opções saem da memória da marca — os produtos que ela vende de verdade, os
+ * públicos que ela já cadastrou, os canais que ela usa. Perguntar "qual
+ * produto?" e esperar digitação, tendo o catálogo em mãos, é jogar no usuário
+ * um trabalho que o sistema já sabe fazer.
+ *
+ * Aceita também a forma antiga, só texto: conversa já gravada não pode quebrar.
+ */
+export const chatQuestionSchema = z.preprocess(
+  (valor) => (typeof valor === "string" ? { question: valor, options: [] } : valor),
+  z.object({
+    question: z.string().trim().min(1).max(200),
+    options: z.array(z.string().trim().min(1).max(80)).max(4).default([]),
+  }),
+);
+
 export const chatTurnSchema = z.object({
   reply: z.string().trim().min(1),
-  questions: z.array(z.string().trim().min(1)).max(3).default([]),
+  questions: z.array(chatQuestionSchema).max(3).default([]),
   brief: briefSchema.nullable().default(null),
   ready: z.boolean().default(false),
 });
 
-export const copySchema = z.object({
-  headline: z.string().trim().min(2).max(120),
-  subheadline: z.string().trim().max(160).default(""),
-  body: z.string().trim().max(600).default(""),
+/**
+ * `null` conta como campo ausente.
+ *
+ * `.default()` do zod só age sobre `undefined`. O modelo, mandado deixar vazio
+ * o que o formato não usa, devolve `"pergunta": null` numa copy de título — e a
+ * resposta inteira caía com `invalid_type`, derrubando a campanha por causa de
+ * um campo que ninguém ia ler.
+ */
+const semNulo = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((valor) => (valor === null ? undefined : valor), schema);
+
+const copyBase = z.object({
+  /*
+   * A headline pode marcar um termo com *asteriscos*: o renderizador o pinta na
+   * cor de acento. É o destaque que aparece em quase todo anúncio bom, e fica
+   * sob controle de quem escreve — não do renderizador adivinhando qual palavra
+   * importa. Sem marca nenhuma, a headline sai inteira na mesma cor.
+   */
+  headline: semNulo(z.string().trim().max(120).default("")),
+  subheadline: semNulo(z.string().trim().max(160).default("")),
+  body: semNulo(z.string().trim().max(600).default("")),
   cta: z.string().trim().min(1).max(40),
+  /** Itens curtos para os arquétipos de lista e de números. */
+  bullets: semNulo(z.array(z.string().trim().min(1).max(70)).max(5).default([])),
+
+  /*
+   * Formatos que não são título + apoio + botão.
+   *
+   * Anúncio bom nem sempre tem headline. A enquete é uma pergunta com respostas
+   * riscadas num quadro; a conversa é um print de mensagens. Nesses, headline e
+   * subheadline não existem — e enquanto a copy só sabia produzir título e
+   * apoio, todo arquétipo acabava sendo o mesmo anúncio com outra moldura.
+   *
+   * Cada variação de copy nasce para um formato. Os campos que o formato não
+   * usa vêm vazios, e é assim que se espera.
+   */
+  formato: semNulo(z.enum(["titulo", "enquete", "conversa"]).default("titulo")),
+
+  /** Enquete: a pergunta e as respostas, com o quanto cada uma foi votada. */
+  pergunta: semNulo(z.string().trim().max(120).default("")),
+  opcoes: semNulo(
+    z
+      .array(
+        z.object({
+          texto: z.string().trim().min(1).max(40),
+          /*
+           * Quantas pessoas marcaram essa resposta.
+           *
+           * O teto era 12 e derrubava a geração: enquete real tem dezenas de
+           * votos, e o próprio prompt pede isso. O desenho é que se ajusta — ele
+           * risca até um limite e escreve o número ao lado.
+           */
+          votos: semNulo(z.number().int().min(0).max(999).default(0)),
+        }),
+      )
+      .max(3)
+      .default([]),
+  ),
+
+  /** Conversa: as mensagens, na ordem em que aparecem. */
+  mensagens: semNulo(
+    z
+      .array(
+        z.object({
+          de: z.enum(["pessoa", "marca"]),
+          /*
+           * O limite que o prompt pede é 140; aqui ele é mais frouxo de
+           * propósito. Balão comprido desarruma o desenho, mas rejeitar a
+           * resposta inteira por dez caracteres a mais mata a campanha — o
+           * teto do schema é rede de segurança, não régua de estilo.
+           */
+          texto: z.string().trim().min(1).max(240),
+        }),
+      )
+      .max(5)
+      .default([]),
+  ),
 });
 
 /**
  * Dentro de um caminho, a copy pode não trazer CTA próprio — nesse caso ela
  * herda o CTA do caminho. Exigir o campo aqui só quebra a geração sem motivo.
  */
-const directionCopySchema = copySchema.extend({
-  cta: z.string().trim().min(1).max(40).optional(),
-});
+/**
+ * Cada formato tem o seu conteúdo obrigatório.
+ *
+ * Exigir headline de todos era o que impedia enquete e conversa de existirem: o
+ * modelo obedecia o prompt, devolvia headline vazia, e o schema rejeitava a
+ * resposta inteira — derrubando a geração da campanha. Agora cada forma cobra o
+ * que ela precisa para se desenhar, e só isso.
+ */
+function exigirConteudoDoFormato(
+  copy: { formato: string; headline: string; pergunta: string; mensagens: unknown[] },
+  ctx: z.RefinementCtx,
+) {
+  if (copy.formato === "titulo" && copy.headline.trim().length < 2) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["headline"], message: "Copy de título precisa de headline." });
+  }
+  if (copy.formato === "enquete" && copy.pergunta.trim().length < 2) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["pergunta"], message: "Enquete precisa da pergunta." });
+  }
+  if (copy.formato === "conversa" && copy.mensagens.length < 2) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["mensagens"], message: "Conversa precisa de ao menos dois balões." });
+  }
+}
+
+export const copySchema = copyBase.superRefine(exigirConteudoDoFormato);
+
+const directionCopySchema = copyBase
+  .extend({ cta: z.string().trim().min(1).max(40).optional() })
+  .superRefine(exigirConteudoDoFormato);
 
 export const directionSchema = z.object({
   name: z.string().trim().min(2).max(80),
@@ -53,7 +168,15 @@ export const directionSchema = z.object({
   cta: z.string().trim().min(1).max(40),
   visual_prompt: z.string().trim().min(10),
   rationale: z.string().trim().default(""),
-  copies: z.array(directionCopySchema).min(1).max(5),
+  /*
+   * As copies não vêm mais junto dos caminhos.
+   *
+   * Pedir 3 caminhos com 3 copies estruturadas de uma vez levava 121 segundos e
+   * estourava o tempo da função — a campanha morria no meio e o job ficava
+   * órfão. Agora cada caminho tem a sua chamada, e elas correm em paralelo:
+   * o relógio passa a ser o da chamada mais lenta, não o da soma.
+   */
+  copies: z.array(directionCopySchema).max(5).default([]),
 });
 
 export const directionsResponseSchema = z.object({
@@ -88,6 +211,18 @@ export const brandAnalysisSchema = z.object({
   confidence: z.enum(["alta", "media", "baixa"]).default("media"),
 });
 
+/**
+ * Uma rodada da conversa de onboarding com quem não tem site.
+ *
+ * O modelo devolve tudo o que já conseguiu entender e, se ainda falta algo
+ * essencial, UMA pergunta — nunca um formulário disfarçado de conversa.
+ */
+export const brandInterviewSchema = z.object({
+  analysis: brandAnalysisSchema,
+  question: z.string().trim().max(240).default(""),
+  complete: z.boolean().default(false),
+});
+
 export const nextTestSchema = z.object({
   best_angle: z.string().trim().default(""),
   best_hook: z.string().trim().default(""),
@@ -99,5 +234,7 @@ export const nextTestSchema = z.object({
 });
 
 export type Brief = z.infer<typeof briefSchema>;
+export type ChatQuestion = z.infer<typeof chatQuestionSchema>;
 export type DirectionPayload = z.infer<typeof directionSchema>;
 export type BrandAnalysis = z.infer<typeof brandAnalysisSchema>;
+export type BrandInterview = z.infer<typeof brandInterviewSchema>;

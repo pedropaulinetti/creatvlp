@@ -16,6 +16,7 @@
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install chromium",
     "seed": "node scripts/seed.mjs",
+    "seed:referencias": "node scripts/seed-referencias.mjs",
     "db:types": "node scripts/gen-types.mjs",
     "functions:deploy": "bash scripts/deploy-functions.sh",
     "secrets:push": "node scripts/push-secrets.mjs"

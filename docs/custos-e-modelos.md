@@ -7,11 +7,36 @@ Slugs validados na API oficial do OpenRouter (`/api/v1/models`) em 24/08/2026.
 | Uso | Modelo | Entrada | Saída |
 | --- | --- | --- | --- |
 | Conversa, briefing, extração, resumo | `openai/gpt-5.6-luna` | US$ 0,20/M | US$ 1,20/M |
-| Estratégia, ângulos, hooks, copies, recomendações | `anthropic/claude-sonnet-5` | US$ 2,00/M | US$ 10,00/M |
-| Fallback da estratégia | `anthropic/claude-sonnet-4.6` | US$ 3,00/M | US$ 15,00/M |
+| Estratégia, ângulos, hooks, copies, recomendações | `qwen/qwen3-235b-a22b-2507` | US$ 0,087/M | US$ 0,35/M |
+| Fallback da estratégia | `deepseek/deepseek-v3.2` | US$ 0,27/M | US$ 0,40/M |
 
 O modelo rápido cuida do que é mecânico. O estratégico só entra onde a qualidade
 do argumento muda o resultado.
+
+### Como o modelo estratégico foi escolhido (02/09/2026)
+
+Sete candidatos, rodando os **prompts reais** do CreatvOS numa marca real, medidos
+por custo, latência, JSON válido em quatro rodadas, headlines distintas entre
+rodadas e invenção de fato fora do contexto:
+
+| Modelo | Custo/chamada | JSON | Distintas | Nota |
+| --- | --- | --- | --- | --- |
+| `qwen/qwen3-235b-a22b-2507` | US$ 0,000119 | 4/4 | 9/9 | escolhido |
+| `deepseek/deepseek-v3.2` | US$ 0,000178 | 4/4 | 9/9 | fallback |
+| `google/gemini-2.5-flash` | US$ 0,000874 | 4/4 | 9/9 | repete o nome do SKU em toda headline |
+| `anthropic/claude-sonnet-5` | US$ 0,005086 | 4/4 | 9/9 | melhor português, 43× o preço |
+| `qwen/qwen3.7-flash` | US$ 0,000397 | **0/4** | — | o mais barato, e devolve JSON inválido |
+| `z-ai/glm-5.3-flash` | US$ 0,001041 | **0/1** | — | JSON inválido em 103 segundos |
+
+Nenhum dos quatro que passaram inventou dado que não estivesse no contexto.
+O Sonnet escreve o português mais natural, mas a distância é pequena e o preço é
+43 vezes maior. Barato que quebra a geração não é barato — por isso o mais barato
+de todos ficou de fora.
+
+Antes desta medição, o **fallback custava mais que o modelo principal**
+(`claude-sonnet-4.6`, US$ 3/15, substituindo o Sonnet 5, US$ 2/10): cair para ele
+encarecia a falha. Hoje o fallback é de outro fornecedor, o que também protege de
+indisponibilidade da casa — coisa que trocar Sonnet por Sonnet não fazia.
 
 ## Imagem
 

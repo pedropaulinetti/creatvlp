@@ -1,7 +1,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import {
-  Check, Download, Heart, MoreHorizontal, Pencil, RefreshCw, Star, Trash2, X,
+  Check, Download, Heart, MoreHorizontal, Pencil, RefreshCw, Star, Trash2, Wand2, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/surface";
@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/overlays";
 import { CreativeCanvas, type Composition, emptyComposition } from "@/features/creatives/CreativeCanvas";
 import { useAssetActions } from "@/features/creatives/mutations";
-import { downloadNode, safeFilename } from "@/features/creatives/export";
+import { downloadNode, downloadUrl, safeFilename } from "@/features/creatives/export";
 import { ASSET_STATUS } from "@/features/creatives/status";
 import { Field, Input, Textarea, MonoLabel } from "@/components/ui/field";
 import { FORMATS, FORMAT_LABEL, type Format } from "@/lib/schemas";
@@ -25,26 +25,31 @@ type Asset = Database["public"]["Tables"]["creative_assets"]["Row"] & {
   variants?: Database["public"]["Tables"]["creative_variants"]["Row"][];
 };
 
-const TEMPLATES = [
-  { key: "produto-destaque", name: "Produto em destaque" },
-  { key: "beneficio-principal", name: "Benefício principal" },
-  { key: "prova-social", name: "Prova social" },
-  { key: "comparacao", name: "Comparação" },
-  { key: "oferta", name: "Oferta" },
-  { key: "editorial", name: "Editorial" },
-  { key: "story-cta", name: "Story com CTA" },
-];
-
 export function AssetCard({
   asset,
+  irmas = [],
   imageUrl,
+  generatedUrl,
+  urlPorFormato,
   logoUrl,
   selected,
   onSelectedChange,
   compact = false,
 }: {
   asset: Asset;
+  /*
+   * As outras versões de formato desta mesma peça.
+   *
+   * Cada formato é uma geração e uma linha própria no banco, mas para quem
+   * olha são a mesma peça em dois tamanhos. Sem isto, os botões de formato do
+   * card não tinham para onde ir — clicava em 9:16 e não acontecia nada.
+   */
+  irmas?: Asset[];
   imageUrl: string | null;
+  /** A peça inteira desenhada pelo modelo, quando já foi pedida. */
+  generatedUrl?: string | null;
+  /** A URL assinada de cada formato desta peça. */
+  urlPorFormato?: Map<string, string>;
   logoUrl: string | null;
   selected?: boolean;
   onSelectedChange?: (value: boolean) => void;
@@ -53,6 +58,12 @@ export function AssetCard({
   const actions = useAssetActions();
   const [open, setOpen] = React.useState(false);
   const [rejecting, setRejecting] = React.useState(false);
+  /*
+   * Criativo antigo — gerado quando a peça era fotografia mais composição em
+   * HTML — não tem `generated_path`. Continua renderizando pelo caminho velho:
+   * sem isso, campanha antiga vira card vazio.
+   */
+  const ehComposicaoAntiga = !asset.generated_path;
   const [reason, setReason] = React.useState("");
   const [format, setFormat] = React.useState<Format>((asset.format as Format) ?? "4:5");
   const canvasRef = React.useRef<HTMLDivElement>(null);
@@ -72,16 +83,31 @@ export function AssetCard({
     } as Composition;
   };
 
+  const todasAsVersoes = React.useMemo(() => [asset, ...irmas], [asset, irmas]);
+
   const availableFormats = React.useMemo(() => {
-    const set = new Set<Format>([asset.format as Format]);
+    const set = new Set<Format>(todasAsVersoes.map((item) => item.format as Format));
     for (const variant of asset.variants ?? []) set.add(variant.format as Format);
     return FORMATS.filter((item) => set.has(item));
-  }, [asset.format, asset.variants]);
+  }, [todasAsVersoes, asset.variants]);
+
+  /** A peça do formato que está sendo olhado — cada uma é um arquivo próprio. */
+  const versaoVisivel = React.useMemo(
+    () => todasAsVersoes.find((item) => item.format === format) ?? asset,
+    [todasAsVersoes, format, asset],
+  );
+
+  const urlVisivel = versaoVisivel.generated_path
+    ? urlPorFormato?.get(versaoVisivel.format) ?? generatedUrl ?? null
+    : null;
 
   async function download() {
-    if (!canvasRef.current) return;
+    const nome = `${safeFilename(asset.id.slice(0, 8))}-${format.replace(":", "x")}.png`;
     try {
-      await downloadNode(canvasRef.current, `${safeFilename(asset.id.slice(0, 8))}-${format.replace(":", "x")}.png`);
+      // A peça desenhada já é o arquivo final; a composição antiga precisa ser
+      // rasterizada a partir do DOM.
+      if (!ehComposicaoAntiga && urlVisivel) return await downloadUrl(urlVisivel, nome);
+      if (canvasRef.current) return await downloadNode(canvasRef.current, nome);
     } catch {
       toast.error("Não conseguimos exportar o PNG. Tente de novo.");
     }
@@ -116,15 +142,24 @@ export function AssetCard({
           className="overflow-hidden rounded-[10px] focus-visible:outline-2"
           aria-label="Abrir criativo"
         >
-          <CreativeCanvas
-            ref={canvasRef}
-            imageUrl={imageUrl}
-            logoUrl={logoUrl}
-            composition={compositionFor(format)}
-            format={format}
-            displayWidth={compact ? 200 : 260}
-            className="mx-auto"
-          />
+          {ehComposicaoAntiga ? (
+            <CreativeCanvas
+              ref={canvasRef}
+              imageUrl={imageUrl}
+              logoUrl={logoUrl}
+              composition={compositionFor(format)}
+              format={format}
+              displayWidth={compact ? 200 : 260}
+              className="mx-auto"
+            />
+          ) : (
+            <img
+              src={urlVisivel ?? ""}
+              alt={(asset.composition as { headline?: string })?.headline || "Peça gerada"}
+              className="mx-auto rounded-[10px]"
+              style={{ width: compact ? 200 : 260 }}
+            />
+          )}
         </button>
 
         <div className="flex items-center gap-2">
@@ -139,12 +174,22 @@ export function AssetCard({
           {(asset.composition as { headline?: string })?.headline || "Sem headline"}
         </p>
 
+        {/*
+          De qual layout esta peça saiu. É o que permite descobrir, olhando os
+          resultados, qual estrutura converte — e repetir só ela na próxima.
+        */}
+        {!ehComposicaoAntiga && asset.template_key && asset.template_key !== "peca-livre" && (
+          <span className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-ink-faint">
+            layout · {asset.template_key}
+          </span>
+        )}
+
         <div className="flex items-center gap-1.5">
           {asset.status !== "aprovado" && (
             <Button
               size="sm"
               variant="outline"
-              onClick={() => actions.setStatus.mutate({ ids: [asset.id], status: "aprovado" })}
+              onClick={() => actions.setStatus.mutate({ ids: todasAsVersoes.map((item) => item.id), status: "aprovado" })}
               loading={actions.setStatus.isPending}
             >
               <Check className="h-3.5 w-3.5" aria-hidden />
@@ -168,7 +213,7 @@ export function AssetCard({
             <DropdownMenuContent align="end">
               <DropdownMenuItem onSelect={() => setOpen(true)}>
                 <Pencil className="h-3.5 w-3.5" aria-hidden />
-                Editar composição
+                Editar texto e gerar de novo
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => void download()}>
                 <Download className="h-3.5 w-3.5" aria-hidden />
@@ -181,22 +226,22 @@ export function AssetCard({
                 {asset.is_favorite ? "Remover dos favoritos" : "Favoritar"}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuLabel>Regenerar</DropdownMenuLabel>
+              <DropdownMenuLabel>Gerar de novo</DropdownMenuLabel>
               <DropdownMenuItem
                 onSelect={() => actions.regenerate.mutate({ assetId: asset.id, mode: "copy" })}
               >
                 <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-                Só a copy · sem crédito
+                Reescrever o texto · sem crédito
               </DropdownMenuItem>
               {IMAGE_QUALITIES.map((level) => (
                 <DropdownMenuItem
                   key={level}
                   onSelect={() =>
-                    actions.regenerate.mutate({ assetId: asset.id, mode: "imagem", quality: level })
+                    actions.regenerate.mutate({ assetId: asset.id, mode: "peca", quality: level })
                   }
                 >
-                  <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-                  Imagem {IMAGE_QUALITY[level].label.toLowerCase()} · 1 crédito ·{" "}
+                  <Wand2 className="h-3.5 w-3.5" aria-hidden />
+                  Redesenhar a peça · {IMAGE_QUALITY[level].label.toLowerCase()} · 1 crédito ·{" "}
                   {formatUSD(IMAGE_QUALITY[level].costUsd)}
                 </DropdownMenuItem>
               ))}
@@ -249,7 +294,11 @@ export function AssetCard({
               variant="danger"
               loading={actions.setStatus.isPending}
               onClick={() => {
-                actions.setStatus.mutate({ ids: [asset.id], status: "rejeitado", reason: reason.trim() });
+                actions.setStatus.mutate({
+                  ids: todasAsVersoes.map((item) => item.id),
+                  status: "rejeitado",
+                  reason: reason.trim(),
+                });
                 setRejecting(false);
                 setReason("");
               }}
@@ -264,6 +313,9 @@ export function AssetCard({
         asset={asset}
         open={open}
         onOpenChange={setOpen}
+        generatedUrl={urlVisivel}
+        versaoVisivel={versaoVisivel}
+        formatosDisponiveis={availableFormats}
         imageUrl={imageUrl}
         logoUrl={logoUrl}
         format={format}
@@ -276,8 +328,11 @@ export function AssetCard({
 
 function AssetDetailDialog({
   asset,
+  versaoVisivel,
+  formatosDisponiveis,
   open,
   onOpenChange,
+  generatedUrl,
   imageUrl,
   logoUrl,
   format,
@@ -285,8 +340,13 @@ function AssetDetailDialog({
   composition,
 }: {
   asset: Asset;
+  /** A peça do formato aberto: é ela que se baixa e se redesenha. */
+  versaoVisivel: Asset;
+  /** Só os formatos que existem de verdade — o resto seria botão morto. */
+  formatosDisponiveis: Format[];
   open: boolean;
   onOpenChange: (value: boolean) => void;
+  generatedUrl: string | null;
   imageUrl: string | null;
   logoUrl: string | null;
   format: Format;
@@ -308,20 +368,33 @@ function AssetDetailDialog({
       <DialogContent
         wide
         title="Editar criativo"
-        description="Texto, posição e contraste são do CreatvOS — a imagem é só o fundo."
+        description="A peça é desenhada por inteiro, então mudar o texto pede uma geração nova — e um crédito."
       >
         <div className="grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,260px)_1fr]">
           <div className="flex flex-col gap-3">
-            <CreativeCanvas
-              ref={canvasRef}
-              imageUrl={imageUrl}
-              logoUrl={logoUrl}
-              composition={draft}
-              format={format}
-              displayWidth={240}
-            />
+            {versaoVisivel.generated_path && generatedUrl ? (
+              <img
+                src={generatedUrl}
+                alt={draft.headline || "Peça gerada"}
+                className="rounded-[10px]"
+                style={{ width: 240 }}
+              />
+            ) : (
+              <CreativeCanvas
+                ref={canvasRef}
+                imageUrl={imageUrl}
+                logoUrl={logoUrl}
+                composition={draft}
+                format={format}
+                displayWidth={240}
+              />
+            )}
+            {/*
+              Só os formatos gerados. Listar os três sempre dava botão morto:
+              clicar em 9:16 numa peça que só existe em 4:5 não fazia nada.
+            */}
             <div className="flex flex-wrap items-center gap-1">
-              {FORMATS.map((item) => (
+              {formatosDisponiveis.map((item) => (
                 <button
                   key={item}
                   type="button"
@@ -335,14 +408,20 @@ function AssetDetailDialog({
                   {item}
                 </button>
               ))}
+              {formatosDisponiveis.length === 1 && (
+                <span className="pl-1 text-[11.5px] text-ink-faint">
+                  gerada só neste formato
+                </span>
+              )}
             </div>
             <Button
               variant="outline"
               size="sm"
               onClick={async () => {
-                if (!canvasRef.current) return;
+                const nome = `${safeFilename(draft.headline)}-${format.replace(":", "x")}.png`;
                 try {
-                  await downloadNode(canvasRef.current, `${safeFilename(draft.headline)}-${format.replace(":", "x")}.png`);
+                  if (versaoVisivel.generated_path && generatedUrl) return await downloadUrl(generatedUrl, nome);
+                  if (canvasRef.current) return await downloadNode(canvasRef.current, nome);
                 } catch {
                   toast.error("Não conseguimos exportar o PNG.");
                 }
@@ -379,38 +458,19 @@ function AssetDetailDialog({
               </Field>
             </div>
 
-            <Field label="Template" htmlFor="template">
-              <div className="flex flex-wrap gap-1.5">
-                {TEMPLATES.map((template) => (
-                  <button
-                    key={template.key}
-                    type="button"
-                    onClick={() => patch({ template_key: template.key })}
-                    aria-pressed={draft.template_key === template.key}
-                    className={cn(
-                      "h-8 rounded-full border px-3 text-[12px] transition-colors",
-                      draft.template_key === template.key
-                        ? "border-accent bg-accent-soft text-accent-ink"
-                        : "border-line text-ink-2 hover:border-accent",
-                    )}
-                  >
-                    {template.name}
-                  </button>
-                ))}
-              </div>
-            </Field>
-
-            <Field label={`Contraste do fundo · ${Math.round(draft.scrim * 100)}%`} htmlFor="scrim">
-              <input
-                id="scrim"
-                type="range"
-                min={0}
-                max={85}
-                value={Math.round(draft.scrim * 100)}
-                onChange={(event) => patch({ scrim: Number(event.target.value) / 100 })}
-                className="w-full accent-[#B4623A]"
-              />
-            </Field>
+            {!versaoVisivel.generated_path && (
+              <Field label={`Contraste do fundo · ${Math.round(draft.scrim * 100)}%`} htmlFor="scrim">
+                <input
+                  id="scrim"
+                  type="range"
+                  min={0}
+                  max={85}
+                  value={Math.round(draft.scrim * 100)}
+                  onChange={(event) => patch({ scrim: Number(event.target.value) / 100 })}
+                  className="w-full accent-[#B4623A]"
+                />
+              </Field>
+            )}
 
             <div className="flex flex-col gap-1">
               <MonoLabel>Prompt visual</MonoLabel>
@@ -424,20 +484,35 @@ function AssetDetailDialog({
             Cancelar
           </Button>
           <Button
-            loading={actions.updateComposition.isPending}
+            loading={actions.updateComposition.isPending || actions.regenerate.isPending}
             onClick={() => {
+              /*
+               * Texto desenhado não se edita no lugar: o modelo desenhou as
+               * letras dentro da imagem. Salvar o texto novo e mandar
+               * redesenhar é o que faz a edição valer — e é por isso que ela
+               * custa um crédito.
+               */
               actions.updateComposition.mutate(
-                { id: asset.id, composition: draft, templateKey: draft.template_key },
+                { id: versaoVisivel.id, composition: draft, templateKey: draft.template_key },
                 {
                   onSuccess: () => {
-                    toast.success("Composição salva");
-                    onOpenChange(false);
+                    if (!versaoVisivel.generated_path) {
+                      toast.success("Composição salva");
+                      onOpenChange(false);
+                      return;
+                    }
+                    actions.regenerate.mutate(
+                      { assetId: versaoVisivel.id, mode: "peca" },
+                      { onSuccess: () => onOpenChange(false) },
+                    );
                   },
                 },
               );
             }}
           >
-            Salvar composição
+            {versaoVisivel.generated_path
+              ? `Salvar e redesenhar ${format} · 1 crédito`
+              : "Salvar composição"}
           </Button>
         </DialogFooter>
       </DialogContent>

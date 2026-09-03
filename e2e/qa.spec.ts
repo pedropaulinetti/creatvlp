@@ -49,16 +49,16 @@ test("percorre as telas e captura o console", async ({ page }, testInfo) => {
   await tirar("04-onboarding");
 
   await page.getByRole("button", { name: /Não tenho site/ }).click();
-  await page.locator("#company").fill("Minas Estate Coffee");
-  await page.getByRole("button", { name: "Continuar" }).click();
-  await tirar("05-onboarding-identidade");
-  await page.getByRole("button", { name: "Pular" }).click();
-  await page.getByRole("button", { name: "+ Adicionar produto" }).click();
-  await page.getByPlaceholder("Nome do produto ou serviço").fill("Bourbon Amarelo");
-  await page.getByRole("button", { name: "Continuar" }).click();
-  for (let i = 0; i < 4; i += 1) await page.getByRole("button", { name: "Pular" }).click();
-  await tirar("06-onboarding-revisao");
-  await page.getByRole("button", { name: "Criar minha marca" }).click();
+  await tirar("05-onboarding-conversa");
+  await page
+    .getByLabel("Sua resposta")
+    .fill("Minas Estate Coffee, café especial de fazenda em Minas, para quem faz café em casa.");
+  await page.getByRole("button", { name: "Enviar" }).click();
+  await expect(page.getByRole("heading", { name: "Encontramos sua marca." })).toBeVisible();
+  await page.locator("#rev-company").fill("Minas Estate Coffee");
+  await page.getByRole("textbox", { name: "Produto 1" }).fill("Bourbon Amarelo");
+  await tirar("06-onboarding-confirmacao");
+  await page.getByRole("button", { name: "É isso, criar marca" }).click();
   await page.waitForURL(/\/app$/);
   await tirar("07-inicio");
 

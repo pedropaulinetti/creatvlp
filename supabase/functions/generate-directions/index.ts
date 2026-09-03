@@ -6,7 +6,11 @@ import { runDirections } from "../_shared/pipeline.ts";
 const bodySchema = z.object({
   workspace_id: z.string().uuid(),
   campaign_id: z.string().uuid(),
-  count: z.number().int().min(3).max(5).default(4),
+  /*
+   * Ausente, o número de caminhos sai do briefing. É o pedido do usuário que
+   * manda — antes vinha fixo do app e a quantidade não desencadeava nada.
+   */
+  count: z.number().int().min(3).max(5).optional(),
 });
 
 export const handler = serveJson(async (request) => {
@@ -21,12 +25,21 @@ export const handler = serveJson(async (request) => {
     const campaign = await assertCampaignInWorkspace(admin, campaignId, workspaceId);
     await enforceRateLimit(admin, workspaceId, caller.userId);
 
+    /*
+     * A chave mandada pelo app distingue as duas intenções que chegam por aqui:
+     * repetir a mesma tentativa (sem chave, o job anterior é reaproveitado) e
+     * pedir caminhos novos (chave própria, geração do zero). Mesmo acordo de
+     * `generate-image` e `regenerate-asset`.
+     */
+    const idempotencyKey = request.headers.get("x-idempotency-key")?.slice(0, 120) ?? null;
+
     const result = await runDirections(admin, {
       workspaceId,
       campaignId,
       brandId: campaign.brand_id,
       userId: caller.userId,
       count,
+      idempotencyKey,
     });
 
     return json(result);

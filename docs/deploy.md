@@ -46,6 +46,20 @@ limite de tamanho e lista de MIME types. As políticas do Storage espelham as do
 banco: o primeiro segmento do caminho é o `workspace_id`, e só membro daquele
 workspace lê ou escreve.
 
+## 2b. Rodando os testes ponta a ponta
+
+O servidor local de funções lê `SUPABASE_URL`, `SUPABASE_ANON_KEY` e
+`SUPABASE_SERVICE_ROLE_KEY` — sem o prefixo `VITE_`. Tendo as três no
+`.env.local`:
+
+```bash
+set -a && . ./.env.local && set +a
+npm run test:e2e
+```
+
+Faltando qualquer uma, as funções respondem `Supabase não configurado na Edge
+Function` e o teste falha sem explicar a causa.
+
 ## 3. Edge Functions
 
 ```bash

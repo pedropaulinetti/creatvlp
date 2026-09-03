@@ -6,7 +6,7 @@
 - [x] Respostas da pesquisa preservadas e acessíveis no `/admin`
 - [x] Cadastro, login, logout, recuperação de senha e persistência de sessão
 - [x] Perfil, workspace, membership e quota criados automaticamente no cadastro
-- [x] Onboarding começa pelo site e cai numa revisão pronta; 8 etapas ficam como caminho manual
+- [x] Onboarding começa pelo site e cai numa confirmação única; sem site, a conversa com a IA cobre
 - [x] Endereço aceito sem `https://`, com `www.`, com espaços ou em maiúsculas
 - [x] Colar o endereço dispara a leitura automaticamente
 - [x] Firecrawl como leitor de reserva, acionado só quando a página vem vazia

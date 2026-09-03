@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton, Dot, Divider } from "@/components/ui/surface";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { useWorkspace } from "@/features/workspace/WorkspaceProvider";
+import { useSugestoes } from "@/features/campaigns/useSugestoes";
 import { useHomeSignals } from "@/features/campaigns/queries";
 import { cn, greeting } from "@/lib/utils";
 import { available } from "@/lib/quotas";
@@ -20,6 +21,7 @@ const WEEKDAYS = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "
 export default function HomePage() {
   const { profile } = useAuth();
   const { brand, quota, plan } = useWorkspace();
+  const { sugestoes } = useSugestoes();
   const { data, isLoading } = useHomeSignals();
   const navigate = useNavigate();
   const [message, setMessage] = React.useState("");
@@ -81,9 +83,9 @@ export default function HomePage() {
                 }
               }}
               placeholder={
-                brand
-                  ? `Quero uma campanha para divulgar ${brand.name} no Dia dos Pais…`
-                  : "Quero uma campanha para o Dia dos Pais…"
+                brand && sugestoes[0]
+                  ? `${sugestoes[0].replace(/\.$/, "")}…`
+                  : "Descreva a campanha que você quer…"
               }
               className="w-full resize-none bg-transparent text-[15.5px] leading-[1.4] text-ink placeholder:text-ink-faint focus:outline-none md:text-[17px] md:leading-[1.45]"
             />

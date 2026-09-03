@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  briefSchema, signUpSchema, routineSchema, performanceSchema, brandSchema, directionsResponseSchema,
+  briefSchema,
+  chatTurnSchema,
+  copySchema, signUpSchema, routineSchema, performanceSchema, brandSchema, directionsResponseSchema,
 } from "@/lib/schemas";
 
 const validBrief = {
@@ -160,5 +162,116 @@ describe("directionsResponseSchema", () => {
       directions: Array(3).fill({ ...direction, visual_prompt: "curto" }),
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe("perguntas da entrevista de campanha", () => {
+  it("aceita pergunta com opções tiradas da memória da marca", () => {
+    const turno = chatTurnSchema.parse({
+      reply: "Preciso saber duas coisas.",
+      questions: [
+        { question: "O que essa campanha vai vender?", options: ["Kit 3 Tech T-Shirt®", "Perfect Top"] },
+      ],
+      brief: null,
+      ready: false,
+    });
+    expect(turno.questions[0].options).toEqual(["Kit 3 Tech T-Shirt®", "Perfect Top"]);
+  });
+
+  it("aceita a forma antiga, só texto, para conversa já gravada não quebrar", () => {
+    const turno = chatTurnSchema.parse({
+      reply: "ok",
+      questions: ["Qual o objetivo?"],
+      brief: null,
+      ready: false,
+    });
+    expect(turno.questions[0]).toEqual({ question: "Qual o objetivo?", options: [] });
+  });
+
+  it("pergunta aberta pode vir sem opção nenhuma", () => {
+    const turno = chatTurnSchema.parse({
+      reply: "ok",
+      questions: [{ question: "Qual a ocasião?" }],
+      brief: null,
+      ready: false,
+    });
+    expect(turno.questions[0].options).toEqual([]);
+  });
+});
+
+describe("cada formato de copy cobra o seu próprio conteúdo", () => {
+  const base = { cta: "Comprar agora" };
+
+  it("copy de título exige headline", () => {
+    expect(copySchema.safeParse({ ...base, formato: "titulo", headline: "" }).success).toBe(false);
+    expect(copySchema.safeParse({ ...base, formato: "titulo", headline: "Sua camiseta evoluiu" }).success).toBe(true);
+  });
+
+  it("enquete vale sem headline, mas não sem pergunta", () => {
+    // Exigir headline de todos era o que impedia a enquete de existir: o modelo
+    // devolvia headline vazia, como pedido, e o schema derrubava a campanha.
+    expect(copySchema.safeParse({ ...base, formato: "enquete", pergunta: "" }).success).toBe(false);
+
+    const valida = copySchema.safeParse({
+      ...base,
+      formato: "enquete",
+      pergunta: "O que mais te deixa inseguro ao presentear?",
+      opcoes: [{ texto: "Se ele vai gostar", votos: 7 }],
+    });
+    expect(valida.success).toBe(true);
+    expect(valida.success && valida.data.headline).toBe("");
+  });
+
+  it("conversa precisa de ao menos dois balões", () => {
+    const um = { ...base, formato: "conversa", mensagens: [{ de: "pessoa", texto: "amassa?" }] };
+    expect(copySchema.safeParse(um).success).toBe(false);
+
+    const dois = {
+      ...base,
+      formato: "conversa",
+      mensagens: [
+        { de: "pessoa", texto: "amassa na mala?" },
+        { de: "marca", texto: "não amassa — o tecido volta sozinho." },
+      ],
+    };
+    expect(copySchema.safeParse(dois).success).toBe(true);
+  });
+
+  it("campo nulo vale como campo ausente", () => {
+    /*
+     * O modelo, mandado deixar vazio o que o formato não usa, devolve
+     * "pergunta": null numa copy de título — e a geração inteira caía com
+     * invalid_type por causa de um campo que ninguém ia ler.
+     */
+    const parsed = copySchema.safeParse({
+      ...base,
+      formato: "titulo",
+      headline: "Sua camiseta evoluiu",
+      pergunta: null,
+      opcoes: null,
+      mensagens: null,
+      bullets: null,
+      subheadline: null,
+    });
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.pergunta).toBe("");
+    expect(parsed.success && parsed.data.opcoes).toEqual([]);
+  });
+
+  it("balão comprido demais não derruba a conversa inteira", () => {
+    const dois = {
+      ...base,
+      formato: "conversa",
+      mensagens: [
+        { de: "pessoa", texto: "amassa na mala?" },
+        { de: "marca", texto: "n".repeat(180) },
+      ],
+    };
+    expect(copySchema.safeParse(dois).success).toBe(true);
+  });
+
+  it("sem formato declarado, vale título — que é o comportamento antigo", () => {
+    const parsed = copySchema.parse({ ...base, headline: "Camiseta que não amassa" });
+    expect(parsed.formato).toBe("titulo");
   });
 });

@@ -80,6 +80,24 @@ function fixtureFor(schemaName: string, messages: unknown): unknown {
     };
   }
 
+  if (schemaName === "brandInterview") {
+    return {
+      analysis: {
+        name: "Marca de teste",
+        description: "O que a pessoa contou sobre a marca.",
+        segment: "Alimentos e bebidas",
+        voice_tone: "Próximo e informativo",
+        colors: [],
+        products: [{ name: "Produto principal", description: "Descrição do produto." }],
+        audience: "Pessoas que valorizam qualidade",
+        differentiators: [],
+        confidence: "media",
+      },
+      question: "",
+      complete: true,
+    };
+  }
+
   if (schemaName === "nextTest") {
     return {
       best_angle: "Prova social",

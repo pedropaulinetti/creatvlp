@@ -59,29 +59,21 @@ test.describe("do cadastro ao criativo na biblioteca", () => {
   test("3. onboarding salva a marca no Supabase", async ({ page }) => {
     await signIn(page, email);
 
-    // Sem site, o caminho é etapa a etapa.
+    // Sem site, o caminho é a conversa com a IA — não um formulário.
     await page.getByRole("button", { name: /Não tenho site/ }).click();
-    await expect(page.getByRole("heading", { name: "Qual é a marca?" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Então me conta você." })).toBeVisible();
 
-    await page.locator("#company").fill("Minas Estate Coffee");
-    await page.getByRole("button", { name: "Continuar" }).click();
+    await page
+      .getByLabel("Sua resposta")
+      .fill("Minas Estate Coffee, café especial de fazenda em Minas, para quem faz café em casa.");
+    await page.getByRole("button", { name: "Enviar" }).click();
 
-    // Identidade é opcional.
-    await page.getByRole("button", { name: "Pular" }).click();
+    // A conversa desemboca na mesma confirmação do caminho do site.
+    await expect(page.getByRole("heading", { name: "Encontramos sua marca." })).toBeVisible();
+    await page.locator("#rev-company").fill("Minas Estate Coffee");
+    await page.getByRole("textbox", { name: "Produto 1" }).fill("Bourbon Amarelo");
 
-    await page.getByRole("button", { name: "+ Adicionar produto" }).click();
-    await page.getByPlaceholder("Nome do produto ou serviço").fill("Bourbon Amarelo");
-    await page.getByRole("button", { name: "Continuar" }).click();
-
-    // Público, voz, canais e frequência podem ser pulados.
-    for (let step = 0; step < 4; step += 1) {
-      await page.getByRole("button", { name: "Pular" }).click();
-    }
-
-    await expect(page.getByRole("heading", { name: "Confira a memória da marca" })).toBeVisible();
-    await expect(page.getByText("Minas Estate Coffee").first()).toBeVisible();
-
-    await page.getByRole("button", { name: "Criar minha marca" }).click();
+    await page.getByRole("button", { name: "É isso, criar marca" }).click();
     await page.waitForURL(/\/app$/);
     await expect(page.getByRole("heading", { name: "O que você quer criar hoje?" })).toBeVisible();
 
@@ -133,8 +125,15 @@ test.describe("do cadastro ao criativo na biblioteca", () => {
     await expect(page.getByText("Qualidade da imagem")).toBeVisible();
     await expect(page.getByText("Rascunho")).toBeVisible();
 
-    await page.getByRole("button", { name: /Gerar 1 imagem/ }).click();
-    await expect(page.getByText(/1 criativos? gerados?/)).toBeVisible({ timeout: 60_000 });
+    // Cada peça é um anúncio desenhado por inteiro: a quantidade pedida é a
+    // quantidade entregue, e cada uma consome um crédito.
+    await expect(page.getByText("Quantas peças")).toBeVisible();
+    await expect(page.getByText("Peças entregues")).toBeVisible();
+    await expect(page.getByText(/uma geração por peça/)).toBeVisible();
+
+    await page.getByLabel("Quantidade de peças").fill("2");
+    await page.getByRole("button", { name: /Gerar 2 peças/ }).click();
+    await expect(page.getByText(/2 peças geradas/)).toBeVisible({ timeout: 90_000 });
   });
 
   test("9-10. aprovar o criativo e encontrá-lo na biblioteca", async ({ page }) => {

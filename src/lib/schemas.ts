@@ -149,10 +149,25 @@ export type Brief = z.infer<typeof briefSchema>;
 /** Entrada do formulário: campos com default são opcionais antes da validação. */
 export type BriefInput = z.input<typeof briefSchema>;
 
+/**
+ * Uma pergunta da entrevista, com respostas prontas para clicar.
+ *
+ * Aceita a forma antiga, só texto, para conversa já gravada não quebrar.
+ */
+export const chatQuestionSchema = z.preprocess(
+  (valor) => (typeof valor === "string" ? { question: valor, options: [] } : valor),
+  z.object({
+    question: z.string().trim().min(1).max(200),
+    options: z.array(z.string().trim().min(1).max(80)).max(4).default([]),
+  }),
+);
+
+export type ChatQuestion = z.infer<typeof chatQuestionSchema>;
+
 /** Resposta estruturada da conversa: ou pede informação, ou entrega o briefing. */
 export const chatTurnSchema = z.object({
   reply: z.string().trim().min(1),
-  questions: z.array(z.string().trim().min(1)).max(3).default([]),
+  questions: z.array(chatQuestionSchema).max(3).default([]),
   brief: briefSchema.nullable().default(null),
   ready: z.boolean().default(false),
 });
@@ -160,6 +175,57 @@ export const chatTurnSchema = z.object({
 export type ChatTurn = z.infer<typeof chatTurnSchema>;
 
 // --------------------------------------------------------------- direções
+/**
+ * A copy e a sua forma.
+ *
+ * Nem todo anúncio tem título: a enquete é uma pergunta com respostas, a
+ * conversa é uma troca de mensagens. Exigir headline de todos era o que impedia
+ * essas formas de existirem — o modelo devolvia headline vazia, como pedido, e
+ * o schema derrubava a campanha inteira.
+ */
+/**
+ * `null` conta como campo ausente — espelha o schema das Edge Functions.
+ * `.default()` do zod só age sobre `undefined`, e o modelo devolve `null` para
+ * o campo que o formato não usa.
+ */
+const semNulo = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((valor) => (valor === null ? undefined : valor), schema);
+
+export const copySchema = z
+  .object({
+    formato: semNulo(z.enum(["titulo", "enquete", "conversa"]).default("titulo")),
+    headline: semNulo(z.string().trim().max(120).default("")),
+    subheadline: semNulo(z.string().trim().default("")),
+    body: semNulo(z.string().trim().default("")),
+    cta: z.string().trim().min(1),
+    bullets: semNulo(z.array(z.string().trim().min(1).max(70)).max(5).default([])),
+    pergunta: semNulo(z.string().trim().max(120).default("")),
+    opcoes: semNulo(
+      z
+        .array(z.object({ texto: z.string().trim().min(1).max(40), votos: semNulo(z.number().int().min(0).max(999).default(0)) }))
+        .max(3)
+        .default([]),
+    ),
+    // 140 é o que o prompt pede; o teto aqui é rede de segurança, não régua.
+    mensagens: semNulo(
+      z
+        .array(z.object({ de: z.enum(["pessoa", "marca"]), texto: z.string().trim().min(1).max(240) }))
+        .max(5)
+        .default([]),
+    ),
+  })
+  .superRefine((copy, ctx) => {
+    if (copy.formato === "titulo" && copy.headline.trim().length < 2) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["headline"], message: "Copy de título precisa de headline." });
+    }
+    if (copy.formato === "enquete" && copy.pergunta.trim().length < 2) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["pergunta"], message: "Enquete precisa da pergunta." });
+    }
+    if (copy.formato === "conversa" && copy.mensagens.length < 2) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["mensagens"], message: "Conversa precisa de ao menos dois balões." });
+    }
+  });
+
 export const directionSchema = z.object({
   name: z.string().trim().min(2),
   hypothesis: z.string().trim().min(2),
@@ -172,17 +238,8 @@ export const directionSchema = z.object({
   cta: z.string().trim().min(1),
   visual_prompt: z.string().trim().min(10),
   rationale: z.string().trim().default(""),
-  copies: z
-    .array(
-      z.object({
-        headline: z.string().trim().min(2),
-        subheadline: z.string().trim().default(""),
-        body: z.string().trim().default(""),
-        cta: z.string().trim().min(1),
-      }),
-    )
-    .min(1)
-    .max(5),
+  // As copies vêm numa chamada própria por caminho, depois destes.
+  copies: z.array(copySchema).max(5).default([]),
 });
 
 export const directionsResponseSchema = z.object({

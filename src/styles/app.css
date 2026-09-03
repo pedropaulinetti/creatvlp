@@ -191,6 +191,50 @@
   }
 }
 
+/* ---------------------------------------------------------------- movimento
+   Usado pela leitura do site no onboarding: cada achado entra no momento em
+   que é descoberto. Fora daqui o app é estático de propósito.
+   O bloco de prefers-reduced-motion abaixo desliga tudo isto. */
+@keyframes surgir {
+  from { opacity: 0; transform: translateY(7px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes cair {
+  0%   { opacity: 0; transform: translateY(-12px) scale(0.8); }
+  62%  { opacity: 1; transform: translateY(2px) scale(1.05); }
+  100% { opacity: 1; transform: none; }
+}
+
+@keyframes varrer {
+  from { transform: translateY(-100%); }
+  to   { transform: translateY(400%); }
+}
+
+@keyframes riscar {
+  from { width: 0; }
+  to   { width: 100%; }
+}
+
+@layer components {
+  .surgir { animation: surgir 0.42s cubic-bezier(0.2, 0.72, 0.3, 1) both; }
+  .cair { animation: cair 0.5s cubic-bezier(0.2, 0.8, 0.3, 1.15) both; }
+
+  /* trilho da etapa em curso: uma luz que desce pela linha */
+  .varrendo {
+    position: relative;
+    overflow: hidden;
+  }
+  .varrendo::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    height: 40%;
+    background: linear-gradient(180deg, transparent, var(--color-surface), transparent);
+    animation: varrer 1.4s ease-in-out infinite;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html[data-surface="app"] *,
   html[data-surface="app"] *::before,
@@ -199,5 +243,12 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* Movimento é enfeite: quem pediu menos movimento recebe o resultado direto. */
+@media (prefers-reduced-motion: reduce) {
+  html[data-surface="app"] .varrendo::after {
+    display: none;
   }
 }

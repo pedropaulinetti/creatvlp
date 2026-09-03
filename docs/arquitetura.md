@@ -88,15 +88,56 @@ markdown ou texto limpo não consegue montar um design system.
 
 `_shared/design-system.ts` faz o caminho completo, no servidor:
 
-1. junta o CSS embutido, os atributos `style=` e até 6 folhas externas;
-2. resolve `var(--token)` antes de ler `font-family`;
+1. junta o CSS embutido, os atributos `style=` e até 12 folhas externas (até
+   900 KB cada): em site grande a paleta mora justamente na folha maior;
+2. resolve `var(--token)` antes de ler `font-family` e antes de ler cor;
 3. converte `#hex`, `rgb()` e `hsl()` para um espaço comum, agrupa tons próximos
-   (senão a paleta sai com doze azuis) e classifica por luminância e saturação
-   em primária, secundária, apoio, fundo e texto;
-4. exige uso relevante para considerar uma cor como identidade — uma ocorrência
-   isolada costuma ser azul de link do navegador, não marca;
-5. acha a logo por `<img>` que se identifica como tal, depois por ícone do head
-   (preferindo SVG), depois pela imagem social.
+   (senão a paleta sai com doze azuis) e classifica por luminância e croma em
+   primária, secundária, apoio, fundo e texto;
+4. **paleta declarada vence paleta inferida.** Quem escreve `--colors-brand-core-P`
+   está dizendo qual é a cor da marca; contar ocorrência no CSS compilado diz
+   outra coisa — diz qual tom a *interface* repete mais, que costuma ser um tint
+   claro. Entre cores declaradas em token decide o croma, não a contagem; cor sem
+   token só entra com uso repetido, senão é azul de link do navegador. Variáveis
+   internas de framework (`--tw-*`, anel de foco, sombra) são descartadas;
+5. acha a logo por `<img>` que se identifica como tal, depois pelo primeiro SVG
+   embutido em `data:` no topo da página (frameworks publicam o logo assim, sem
+   nenhuma palavra que o identifique), depois por ícone do head e por fim pela
+   imagem social;
+6. **sendo o logo um SVG, as cores dele lideram a paleta.** É o único lugar do
+   site onde só existe marca — sem cinza de borda, tint de botão ou cor de
+   estado. Logo monocromático não tem cor a oferecer e não muda nada;
+7. guarda as demais imagens como referência visual da marca (até 12), e a foto
+   de cada produto do catálogo junto do produto. Antes as imagens eram extraídas
+   e descartadas.
+
+**Onde a imagem se esconde.** Ler só `src` deixa a maior parte para trás: sites
+com carregamento preguiçoso guardam o endereço real num `data-src` e deixam um
+placeholder no `src`; `srcset` traz a mesma foto em vários tamanhos, e a
+referência quer a maior; banner de destaque costuma ser `background-image` no
+próprio HTML; e a imagem principal aparece como `<link rel="preload" as="image">`.
+Medido na Insider (Shopify): 30 imagens contra 6 lendo só `src`.
+
+Medido em quatro sites reais. Sem o passo 4, o roxo do Nubank (`#8D0DE3`, declarado
+em `--colors-brand-core-P`) perdia para os próprios tons claros, e o cinza do
+Tailwind entrava como cor de marca da Natura. Sem os passos 5 e 6, o vibiz.com.br
+— Next.js sem tokens, com o logo embutido em `data:` — devolvia o `slate-700` do
+Tailwind como cor primária, enquanto o verde da marca estava dentro do logo.
+
+**Não é só a home.** `_shared/crawl.ts` escolhe até três páginas internas do mesmo
+site, por palavra no caminho — produtos, planos, serviços, sobre. A home diz o que
+a marca é; o que ela vende costuma estar nas outras. Cada uma entra com imagens,
+logo (quando a home não tinha) e texto para o modelo.
+
+**Quando renderizar.** O Firecrawl entra em duas situações, não uma: HTML que
+chega vazio, e HTML com texto mas **sem nenhuma imagem** — em site feito como
+aplicação as fotos entram por JavaScript. Medido no leavo.ai, renderizar levou de
+1 para 6 imagens, de 3 para 5 planos e revelou o menu real, que mudou quais
+páginas internas valia ler.
+
+A leitura anuncia cada etapa assim que ela termina (`_shared/stream.ts`, SSE), e
+o onboarding mostra o achado na hora. Quem não pede stream recebe o mesmo JSON
+de sempre, inteiro, no fim — os dois modos saem do mesmo código.
 
 `_shared/shopify.ts` complementa: toda loja Shopify publica `/products.json` sem
 autenticação. Detectada a plataforma, o catálogo entra estruturado — com preço,

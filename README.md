@@ -18,7 +18,7 @@ produto → ângulos → copies → criativos → resultado → próximo teste
 | Landing pública | `/` | no ar, tema escuro original |
 | Pesquisa de descoberta | `/pesquisa` | no ar, intocada |
 | Login, cadastro, recuperação | `/login`, `/cadastro`, `/recuperar-senha` | funcionando |
-| Onboarding em 8 etapas | `/onboarding` | funcionando, com leitura de site |
+| Onboarding em uma tela | `/onboarding` | funcionando: lê o site e pede só confirmação |
 | Início (conversa) | `/app` | funcionando |
 | Campanhas | `/app/campanhas`, `/app/campanhas/:id` | funcionando |
 | Rotinas | `/app/rotinas` | funcionando, cron a cada 15 min |
@@ -151,14 +151,26 @@ subir sem `FAKE_AI=true`.
    - **paleta** extraída do CSS do site (não do HTML: cor de marca vive em folha
      de estilo e em variáveis, e resolvemos `var(--token)`);
    - **tipografia** das declarações `font-family` e dos `@import` do Google Fonts;
-   - **logo**, baixada e guardada no nosso Storage;
+   - **logo**, inclusive quando vem embutida em `data:` no HTML — e, sendo
+     vetor, as cores dela lideram a paleta;
+   - **imagens do site** — de `src`, `srcset`, atributos de carregamento
+     preguiçoso, fundos e preloads —, guardadas como referência visual da marca;
+   - a **foto de cada produto** do catálogo, guardada junto dele;
+   - o conteúdo de **até três páginas internas** (produtos, planos, sobre), não
+     só o da home — é nelas que costuma estar o que a marca vende;
    - **catálogo completo**, quando a loja é Shopify — `/products.json` é público,
      então basta colar o endereço: nome, descrição, preço, moeda e imagem de cada
      produto, sem app, sem OAuth, sem chave.
 
-   Com isso a pessoa cai direto numa tela de **revisão**, com tudo preenchido e
-   editável, e conclui em um clique. Quem não tem site (ou cujo site rendeu pouco)
-   segue pelo caminho de 8 etapas.
+   As etapas da leitura aparecem enquanto acontecem: as cores caem na paleta uma
+   a uma, a amostra de texto passa a usar a tipografia do site, os produtos entram
+   em cascata. Ao fim, uma **única tela de confirmação** com tudo preenchido e
+   editável no lugar — inclusive removendo cor ou produto — e a marca é criada em
+   um clique. Não há etapas a percorrer.
+
+   Quem não tem site (ou cujo site não deixou ler) **conversa com a IA**: escreve
+   um parágrafo do jeito dele e o modelo pergunta, uma coisa por vez, só o que
+   ainda falta. Termina na mesma tela de confirmação.
 
    Nada disso depende de IA: paleta, fonte, logo e catálogo são leitura pura. O
    modelo rápido só interpreta texto (descrição, segmento, tom); se ele estiver
@@ -168,17 +180,29 @@ subir sem `FAKE_AI=true`.
    8 de 8 renderam paleta, tipografia e logo — por isso não usamos um serviço
    externo de scraping. A busca fica atrás de uma função só, então trocar por um
    renderizador com JavaScript, se algum cliente precisar, é pontual.
-2. **Conversa** interpreta o pedido, consulta a memória da marca e faz no máximo
-   três perguntas. Vira um briefing estruturado, validado com Zod.
+2. **Entrevista** interpreta o pedido, consulta a memória da marca e faz no máximo
+   três perguntas — cada uma com **2 a 4 respostas prontas para clicar**, tiradas
+   da própria memória: os produtos que a marca vende, os públicos cadastrados, os
+   canais que ela usa. Perguntar "qual produto?" e esperar digitação, tendo o
+   catálogo em mãos, é jogar no usuário um trabalho que o sistema já sabe fazer.
+   O campo de texto continua ali: opção é atalho, não camisa de força, e pergunta
+   aberta o bastante vem sem opção nenhuma. Vira um briefing estruturado,
+   validado com Zod.
 3. **Confirmação explícita** do briefing. Só depois dela o sistema gera de 3 a 5
    caminhos criativos com copies — ainda sem imagem, sem crédito de imagem.
 4. **Seleção dos caminhos** que merecem virar imagem. Antes de gerar, a interface
    mostra quantos créditos serão consumidos, o custo estimado, o que é mantido e
    o que é criado.
-5. **Geração**: uma imagem-base por caminho. O modelo desenha só a cena — headline,
-   subheadline, preço, CTA, logo e identidade são compostos pelo CreatvOS de forma
-   determinística. Isso garante texto correto e adaptação barata de formato:
-   4:5, 1:1 e 9:16 saem da mesma imagem, **sem nova geração**.
+5. **Geração**: uma imagem-base por caminho, e dela saem **três peças prontas** —
+   uma por template (produto em destaque, benefício principal, oferta). O modelo
+   recebe a **foto do produto** e as referências visuais da marca, e desenha só a
+   cena; headline, subheadline, preço, CTA, logo e identidade são compostos pelo
+   CreatvOS de forma determinística.
+
+   Isso é o que torna a campanha inteira barata: template é composição sobre a
+   mesma fotografia, então três peças custam **uma** imagem. Pelo mesmo motivo os
+   formatos 4:5, 1:1 e 9:16 saem sem nova geração. Um caminho selecionado entrega
+   três peças; três caminhos entregam nove, ao preço de três imagens.
 6. **Revisão**: aprovar, rejeitar com motivo, editar copy, trocar template, ajustar
    contraste, regenerar só a imagem ou só a copy, baixar PNG.
 7. **Biblioteca** guarda tudo com origem, ângulo, copy, prompt, modelo, custo,

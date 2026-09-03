@@ -17,7 +17,7 @@ for f in _shared/*.ts; do SHARED_ARGS+=(-F "file=@$f;filename=$f"); done
 
 SLUGS=("$@")
 if [ ${#SLUGS[@]} -eq 0 ]; then
-  SLUGS=(analyze-brand campaign-chat generate-directions generate-copies generate-image \
+  SLUGS=(analyze-brand interpret-brand campaign-chat generate-directions generate-copies generate-image \
          regenerate-asset record-performance recommend-next-test admin-retry-job run-routines)
 fi
 

@@ -41,7 +41,7 @@ export function looksLikeShopify(html: string): boolean {
   );
 }
 
-function stripHtml(value: string): string {
+export function stripHtml(value: string): string {
   return value
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/g, " ")
@@ -54,7 +54,7 @@ function stripHtml(value: string): string {
     .trim();
 }
 
-function toCents(price: unknown): number | null {
+export function toCents(price: unknown): number | null {
   const value = Number(String(price ?? "").replace(",", "."));
   if (!Number.isFinite(value) || value < 0) return null;
   return Math.round(value * 100);
@@ -64,7 +64,7 @@ function toCents(price: unknown): number | null {
  * As tags do Shopify muitas vezes carregam metadado interno
  * ("allbirds::cfId => ..."). Só entram as que parecem legíveis por humano.
  */
-function usefulTags(tags: unknown, limit = 4): string[] {
+export function usefulTags(tags: unknown, limit = 4): string[] {
   const list = Array.isArray(tags)
     ? tags.map(String)
     : typeof tags === "string"

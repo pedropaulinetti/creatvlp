@@ -2,8 +2,9 @@ import { z } from "npm:zod@3.23.8";
 import { serveJson, json, errors } from "../_shared/http.ts";
 import { adminClient, requireUser, requireMembership, enforceRateLimit } from "../_shared/auth.ts";
 import { generateImage, chatStructured } from "../_shared/openrouter.ts";
-import { imagePrompt, copiesPrompt } from "../_shared/prompts.ts";
+import { imagePrompt, copiesPrompt, pecaCompletaPrompt } from "../_shared/prompts.ts";
 import { copiesResponseSchema, briefSchema } from "../_shared/schemas.ts";
+import { assinarReferencia } from "../_shared/referencias.ts";
 import { loadBrandMemory, loadConfirmedBrief } from "../_shared/memory.ts";
 import { openJob, completeJob, failJob, recordUsage, auditLog } from "../_shared/jobs.ts";
 import { reserveCredits, confirmCredits, refundCredits } from "../_shared/credits.ts";
@@ -14,8 +15,15 @@ import { DEFAULT_IMAGE_QUALITY, estimatedImageCost, imageModelFor, MODELS, type 
 const bodySchema = z.object({
   workspace_id: z.string().uuid(),
   asset_id: z.string().uuid(),
-  /** "imagem" gasta crédito; "copy" não gasta imagem. */
-  mode: z.enum(["imagem", "copy", "ambos"]),
+  /*
+   * "imagem" refaz a fotografia de fundo; "copy" reescreve o texto; "ambos" faz
+   * os dois. "peca" é outra coisa: o modelo desenha o anúncio inteiro, texto
+   * incluído, seguindo o arquétipo do template — e o resultado fica ao lado da
+   * composição, sem substituí-la.
+   *
+   * Todos menos "copy" gastam crédito de imagem.
+   */
+  mode: z.enum(["imagem", "copy", "ambos", "peca"]),
   visual_prompt: z.string().trim().max(2000).optional(),
   quality: z.enum(["rascunho", "padrao", "alta"]).optional(),
 });
@@ -51,6 +59,7 @@ export const handler = serveJson(async (request) => {
     const { brand } = await loadBrandMemory(admin, asset.brand_id, workspaceId);
     const needsImage = mode === "imagem" || mode === "ambos";
     const needsCopy = mode === "copy" || mode === "ambos";
+    const needsPeca = mode === "peca";
 
     const idempotencyKey =
       request.headers.get("x-idempotency-key")?.slice(0, 120) || `regen:${assetId}:${mode}:${Date.now()}`;
@@ -62,15 +71,15 @@ export const handler = serveJson(async (request) => {
       idempotencyKey,
       campaignId: asset.campaign_id,
       assetId,
-      model: needsImage ? imageModelFor(quality).model : MODELS.strategy,
-      estimatedCostUsd: needsImage ? estimatedImageCost(quality) : 0,
-      creditsReserved: needsImage ? 1 : 0,
+      model: needsImage || needsPeca ? imageModelFor(quality).model : MODELS.strategy,
+      estimatedCostUsd: needsImage || needsPeca ? estimatedImageCost(quality) : 0,
+      creditsReserved: needsImage || needsPeca ? 1 : 0,
       input: { mode, quality },
     });
 
     if (job.reused) return json({ reused: true, asset: job.output });
 
-    if (needsImage) await reserveCredits(admin, workspaceId, "imagem", 1, job.id);
+    if (needsImage || needsPeca) await reserveCredits(admin, workspaceId, "imagem", 1, job.id);
 
     try {
       await admin.from("creative_assets").update({ status: "gerando" }).eq("id", assetId);
@@ -102,6 +111,98 @@ export const handler = serveJson(async (request) => {
         update.render_path = null;
         update.visual_prompt = visualPrompt;
         update.model = usage.model;
+        update.cost_usd = Number(asset.cost_usd ?? 0) + usage.costUsd;
+
+        await recordUsage(admin, { workspaceId, userId: caller.userId, jobId: job.id, kind: "regeneracao", usage, images: 1 });
+      }
+
+      /*
+       * A peça inteira: o modelo desenha o anúncio completo a partir da
+       * composição já aprovada — mesmo texto, mesma paleta, mesmo arquétipo.
+       *
+       * Recebe a imagem-base como referência para manter a cena, e a foto do
+       * produto quando existe. O resultado vai para `generated_path`: a
+       * composição em HTML continua intacta ao lado, porque texto desenhado por
+       * modelo erra acento e não se corrige sem gerar de novo.
+       */
+      if (needsPeca) {
+        /*
+         * A referência que deu a estrutura da peça original fica registrada em
+         * `template_key`. Reencontrá-la é o que faz "editar o texto e gerar de
+         * novo" devolver a mesma peça com outro texto, em vez de um anúncio
+         * completamente diferente.
+         */
+        const { data: referencia } = await admin
+          .from("layout_references")
+          .select("storage_path, estrutura")
+          .eq("key", asset.template_key ?? "")
+          .maybeSingle();
+
+        const urlDaReferencia = referencia?.storage_path
+          ? await assinarReferencia(admin, referencia.storage_path)
+          : null;
+
+        const spec = {
+          estrutura: String(referencia?.estrutura ?? ""),
+          layoutAnexado: Boolean(urlDaReferencia),
+          headline: String(composition.headline ?? ""),
+          subheadline: String(composition.subheadline ?? ""),
+          cta: String(composition.cta ?? ""),
+          price: String(composition.price ?? ""),
+          bullets: Array.isArray(composition.bullets) ? (composition.bullets as string[]) : [],
+          palette: (composition.palette as { ink: string; surface: string; accent: string }) ?? {
+            ink: "#171412",
+            surface: "#FFFDFA",
+            accent: "#B4623A",
+          },
+          typography: (composition.typography as { headline: string; body: string }) ?? {
+            headline: "Inter",
+            body: "Inter",
+          },
+          format: String(asset.format ?? "4:5"),
+        };
+
+        if (!spec.headline) throw errors.invalid("Este criativo não tem título para desenhar a peça.");
+
+        /*
+         * A peça anterior entra como referência da cena: regerar não é começar
+         * do zero, é redesenhar a mesma ideia. A estrutura vem da referência de
+         * layout, quando ela ainda existe no acervo.
+         */
+        const referencias: string[] = [];
+        const anterior = asset.generated_path ?? asset.base_path;
+        if (anterior) {
+          const { data: assinada } = await admin.storage
+            .from("creative-assets")
+            .createSignedUrl(anterior, 900);
+          if (assinada?.signedUrl) referencias.push(assinada.signedUrl);
+        }
+        if (urlDaReferencia) referencias.push(urlDaReferencia);
+
+        const { image, usage } = await generateImage({
+          /*
+           * A ordem aqui é outra: a peça anterior vem primeiro, e é dela que
+           * saem produto e cena. Declarar isso é o que impede o modelo de ler
+           * a peça anterior como referência de layout de terceiros.
+           */
+          prompt: pecaCompletaPrompt(spec, brand, {
+            anterior: referencias.length > 0 && Boolean(anterior),
+            produto: false,
+            layout: Boolean(urlDaReferencia),
+            estilo: 0,
+          }),
+          references: referencias,
+          quality,
+        });
+
+        update.generated_path = await uploadImage(admin, {
+          bucket: "creative-assets",
+          workspaceId,
+          brandId: asset.brand_id,
+          resourceType: "peca",
+          base64: image.base64,
+          mimeType: image.mimeType,
+        });
         update.cost_usd = Number(asset.cost_usd ?? 0) + usage.costUsd;
 
         await recordUsage(admin, { workspaceId, userId: caller.userId, jobId: job.id, kind: "regeneracao", usage, images: 1 });

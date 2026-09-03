@@ -40,25 +40,29 @@ test("o site preenche a marca sozinho", async ({ page }, testInfo) => {
   await page.getByLabel("Endereço do site").fill("https://www.creatv.com.br");
   await page.getByRole("button", { name: "Analisar" }).click();
 
-  // Chega na revisão com o que foi lido do CSS.
-  await expect(page.getByRole("heading", { name: "É isso mesmo?" })).toBeVisible({ timeout: 90_000 });
-  await expect(page.getByText("Lemos seu site").first()).toBeVisible();
+  // A leitura acontece à vista, etapa por etapa.
+  await expect(page.getByText("Folhas de estilo")).toBeVisible({ timeout: 30_000 });
+
+  // E termina na confirmação, com o que foi lido do CSS.
+  await expect(page.getByRole("heading", { name: "Encontramos sua marca." })).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByText("Lido de www.creatv.com.br")).toBeVisible();
   await expect(page.getByText("Paleta ·")).toBeVisible();
   await expect(page.getByText("#7899AB")).toBeVisible();
   await expect(page.getByText("Instrument Serif")).toBeVisible();
-  await expect(page.getByText("Logo do site importada.")).toBeVisible();
+  // A logo aparece como imagem, não como texto dizendo que veio.
+  await expect(page.getByAltText("Logo importada do site")).toBeVisible();
 
-  // Dá para concluir direto, sem passar pelas 8 etapas.
+  // Uma tela só: dá para concluir daqui, sem nenhuma etapa pelo caminho.
   await page.locator("#rev-company").fill("CreatvOS");
   const primeiroProduto = page.getByRole("textbox", { name: "Produto 1" });
   if (await primeiroProduto.count()) {
     await primeiroProduto.fill("Plano Beta");
   } else {
-    await page.getByRole("button", { name: "+ Adicionar produto" }).click();
+    await page.getByRole("button", { name: "Adicionar produto" }).click();
     await page.getByRole("textbox", { name: "Produto 1" }).fill("Plano Beta");
   }
 
-  await page.getByRole("button", { name: "Criar minha marca" }).click();
+  await page.getByRole("button", { name: "É isso, criar marca" }).click();
   await page.waitForURL(/\/app$/, { timeout: 40_000 });
 
   const admin = adminClient();

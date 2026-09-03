@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import type { Usage } from "./openrouter.ts";
 import { errors } from "./http.ts";
+import { refundCredits } from "./credits.ts";
 
 export type JobKind =
   | "chat" | "briefing" | "direcoes" | "copies"
@@ -12,6 +13,29 @@ export type Job = { id: string; status: string; output: unknown; reused: boolean
  * Cria (ou recupera) um job pela chave de idempotência.
  * Repetir a mesma chave devolve o resultado anterior em vez de gastar de novo.
  */
+/**
+ * Depois disso, um job ainda "processing" é dado por morto.
+ *
+ * A geração mais lenta do sistema — imagens de vários caminhos — cabe em muito
+ * menos que isso. O valor é folgado de propósito: retomar cedo demais duplicaria
+ * um trabalho que ainda está em curso.
+ */
+const TEMPO_ATE_ABANDONO_MS = 5 * 60 * 1000;
+
+/**
+ * A chave de idempotência de uma geração de caminhos criativos.
+ *
+ * Sem pedido explícito ela é a mesma para a mesma versão do briefing, e é isso
+ * que protege o clique duplo, a retomada da conversa e a função reiniciada no
+ * meio. Mas "Novos caminhos" é um pedido novo, não uma repetição: quando o app
+ * manda uma chave, é ela que vale — senão `openJob` devolvia o job anterior,
+ * já `completed`, e a tela continuava exatamente igual sem nenhum aviso.
+ */
+export function chaveDosCaminhos(campaignId: string, briefVersion: number, pedida?: string | null) {
+  const limpa = pedida?.trim();
+  return limpa ? limpa.slice(0, 120) : `direcoes:${campaignId}:v${briefVersion}`;
+}
+
 export async function openJob(
   admin: SupabaseClient,
   params: {
@@ -30,7 +54,7 @@ export async function openJob(
 ): Promise<Job> {
   const { data: existing } = await admin
     .from("ai_generation_jobs")
-    .select("id, status, output")
+    .select("id, status, output, started_at, credits_reserved")
     .eq("workspace_id", params.workspaceId)
     .eq("idempotency_key", params.idempotencyKey)
     .maybeSingle();
@@ -39,8 +63,37 @@ export async function openJob(
     if (existing.status === "completed") {
       return { id: existing.id, status: existing.status, output: existing.output, reused: true };
     }
+
     if (existing.status === "processing") {
-      throw errors.rateLimit();
+      /*
+       * Job em curso de verdade é duplicata: recusar é o certo.
+       *
+       * Mas job que morreu no meio — função reiniciada, deploy no instante
+       * errado, tempo esgotado — ficava "processing" para sempre e travava
+       * aquela campanha em definitivo: toda nova tentativa recebia "muitas
+       * solicitações seguidas", uma mensagem que não descreve nada do que está
+       * acontecendo e da qual não há como sair.
+       *
+       * Passado o tempo em que qualquer geração já teria terminado, o job é
+       * dado por abandonado e retomado. Os créditos que ele havia reservado
+       * voltam antes, senão a reserva conta duas vezes.
+       */
+      const iniciado = existing.started_at ? Date.parse(existing.started_at) : 0;
+      const abandonado = !iniciado || Date.now() - iniciado > TEMPO_ATE_ABANDONO_MS;
+      if (!abandonado) throw errors.rateLimit();
+
+      const reservados = Number(existing.credits_reserved ?? 0);
+      if (reservados > 0) {
+        await refundCredits(
+          admin,
+          params.workspaceId,
+          "imagem",
+          reservados,
+          existing.id,
+          "Geração anterior interrompida",
+        ).catch(() => undefined);
+      }
+      console.error("job_abandonado_retomado", existing.id, params.kind);
     }
     await admin
       .from("ai_generation_jobs")

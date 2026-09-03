@@ -13,6 +13,7 @@ import { useAuth } from "@/features/auth/AuthProvider";
 import { requireSupabase, supabase } from "@/lib/supabase";
 import { signedUrl, uploadBrandFile, validateImageFile } from "@/lib/storage";
 import { CHANNELS, FORMATS, FORMAT_LABEL } from "@/lib/schemas";
+import { FotoDoProduto } from "@/components/FotoDoProduto";
 import { cn } from "@/lib/utils";
 import type { Database } from "@/lib/database.types";
 
@@ -678,6 +679,33 @@ function ProductsSection({
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["products"] }),
   });
 
+  /*
+   * A foto do produto entra aqui quando o site não tinha nenhuma para dar — e
+   * é aqui também que se troca a que veio errada da leitura. Sem foto, a peça
+   * gerada inventa o objeto em vez de mostrar o que a marca vende.
+   */
+  async function enviarFoto(id: string, arquivo: File) {
+    // O bucket de produto não guarda SVG.
+    const validacao = validateImageFile(arquivo, { allowSvg: false });
+    if (!validacao.ok) {
+      toast.error(validacao.reason);
+      return;
+    }
+    try {
+      const caminho = await uploadBrandFile({
+        bucket: "product-assets",
+        workspaceId,
+        brandId,
+        resourceType: "produto",
+        file: arquivo,
+      });
+      await update.mutateAsync({ id, values: { image_path: caminho } });
+      toast.success("Foto do produto atualizada");
+    } catch (falha) {
+      toast.error(falha instanceof Error ? falha.message : "Não foi possível enviar a foto.");
+    }
+  }
+
   if (products.isLoading) return <LoadingBlock label="Carregando produtos" />;
   if (products.error) return <ErrorState description="Não conseguimos carregar os produtos." />;
 
@@ -688,6 +716,11 @@ function ProductsSection({
       {(products.data ?? []).map((product) => (
         <Panel key={product.id} className="flex flex-col gap-2.5 p-4">
           <div className="flex items-center gap-2">
+            <FotoDoProduto
+              nome={product.name}
+              imagePath={product.image_path}
+              aoEnviar={(arquivo) => enviarFoto(product.id, arquivo)}
+            />
             <Input
               defaultValue={product.name}
               aria-label="Nome do produto"

@@ -129,7 +129,7 @@ export function useAssetActions() {
       quality,
     }: {
       assetId: string;
-      mode: "imagem" | "copy" | "ambos";
+      mode: "imagem" | "copy" | "ambos" | "peca";
       quality?: ImageQuality;
     }) => {
       return callFunction("regenerate-asset", {
@@ -141,7 +141,13 @@ export function useAssetActions() {
     },
     onSuccess: async (_data, variables) => {
       await invalidate();
-      toast.success(variables.mode === "copy" ? "Copy regenerada" : "Criativo regenerado");
+      toast.success(
+        variables.mode === "copy"
+          ? "Texto reescrito"
+          : variables.mode === "peca"
+            ? "Peça redesenhada"
+            : "Criativo regenerado",
+      );
     },
     onError: (error) => toast.error(functionErrorMessage(error)),
   });

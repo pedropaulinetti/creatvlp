@@ -3,6 +3,15 @@ import JSZip from "jszip";
 
 /** Exporta o nó em tamanho real. O que está na tela é o que sai no PNG. */
 export async function renderToBlob(node: HTMLElement): Promise<Blob> {
+  /*
+   * Espera a tipografia da marca terminar de carregar.
+   *
+   * Sem isso o PNG sai na fonte substituta mesmo com a certa já na tela: a
+   * exportação lê o layout no instante em que roda, e a fonte do Google chega
+   * depois. É o tipo de erro que só aparece no arquivo entregue ao cliente.
+   */
+  if (document.fonts?.ready) await document.fonts.ready;
+
   const blob = await toBlob(node, {
     pixelRatio: 1,
     cacheBust: true,
@@ -28,6 +37,18 @@ export function downloadBlob(blob: Blob, filename: string) {
 
 export async function downloadNode(node: HTMLElement, filename: string) {
   downloadBlob(await renderToBlob(node), filename);
+}
+
+/**
+ * Baixa a peça desenhada pelo modelo.
+ *
+ * Sem passar pelo `html-to-image`: o arquivo já é a peça inteira, e re-renderizar
+ * um `<img>` no canvas só perderia qualidade.
+ */
+export async function downloadUrl(url: string, filename: string) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error("Não foi possível baixar a peça.");
+  downloadBlob(await response.blob(), filename);
 }
 
 export function safeFilename(value: string, fallback = "criativo"): string {

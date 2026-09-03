@@ -7,6 +7,7 @@ import {
   Home,
   Library,
   LogOut,
+  Megaphone,
   PanelLeft,
   Plus,
   RotateCw,
@@ -31,6 +32,7 @@ import { cn, initials } from "@/lib/utils";
 
 const NAV = [
   { to: "/app", label: "Início", short: "Início", icon: Home, end: true },
+  { to: "/app/campanhas", label: "Campanhas", short: "Campanhas", icon: Megaphone, end: false },
   { to: "/app/rotinas", label: "Rotinas", short: "Rotinas", icon: RotateCw, end: false },
   { to: "/app/biblioteca", label: "Biblioteca", short: "Biblioteca", icon: Library, end: false },
   { to: "/app/marca", label: "Minha Marca", short: "Marca", icon: CircleDot, end: false },
@@ -188,7 +190,7 @@ export function AppShell() {
   };
 
   return (
-    <div className="flex min-h-dvh bg-paper">
+    <div className="flex h-dvh overflow-hidden bg-paper">
       <a
         href="#conteudo"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-[8px] focus:bg-ink focus:px-3 focus:py-2 focus:text-[13px] focus:text-surface"
@@ -199,7 +201,7 @@ export function AppShell() {
       {/* Sidebar — só em telas médias para cima (o mobile usa a barra inferior) */}
       <aside
         className={cn(
-          "hidden shrink-0 flex-col px-3 pb-3.5 pt-[18px] md:flex",
+          "scroll-slim hidden shrink-0 flex-col overflow-y-auto px-3 pb-3.5 pt-[18px] md:flex",
           collapsed ? "w-[68px]" : "w-[216px]",
         )}
       >

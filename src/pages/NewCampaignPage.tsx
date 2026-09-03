@@ -7,16 +7,23 @@ import { Button } from "@/components/ui/button";
 import { MonoLabel } from "@/components/ui/field";
 import { InlineError, Notice, LoadingBlock } from "@/components/ui/states";
 import { BriefEditor } from "@/features/campaigns/BriefEditor";
+import { useSugestoes } from "@/features/campaigns/useSugestoes";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { useWorkspace } from "@/features/workspace/WorkspaceProvider";
 import { supabase, requireSupabase } from "@/lib/supabase";
 import { callFunction, functionErrorMessage, FunctionError } from "@/lib/functions";
-import { briefSchema, type Brief } from "@/lib/schemas";
+import { briefSchema, type Brief, type ChatQuestion } from "@/lib/schemas";
 import { available } from "@/lib/quotas";
 import { cn } from "@/lib/utils";
 
-type Turn = { reply: string; questions: string[]; brief: Brief | null; ready: boolean };
-type ChatMessage = { id: string; role: "user" | "assistant"; content: string; brief?: Brief | null; questions?: string[] };
+type Turn = { reply: string; questions: ChatQuestion[]; brief: Brief | null; ready: boolean };
+type ChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  brief?: Brief | null;
+  questions?: ChatQuestion[];
+};
 
 export default function NewCampaignPage() {
   const { user } = useAuth();
@@ -36,6 +43,7 @@ export default function NewCampaignPage() {
   const cancelled = React.useRef(false);
   const bottomRef = React.useRef<HTMLDivElement>(null);
   const seeded = React.useRef(false);
+  const { sugestoes } = useSugestoes();
 
   // Recuperação depois de atualizar a página: a conversa vive no banco.
   const history = useQuery({
@@ -73,6 +81,15 @@ export default function NewCampaignPage() {
   React.useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, sending]);
+
+  /*
+   * Só o último bloco de perguntas continua clicável. Deixar as anteriores
+   * ativas convida a responder algo que a conversa já superou.
+   */
+  const ultimaResposta = React.useMemo(
+    () => [...messages].reverse().find((item) => item.role === "assistant")?.id ?? "",
+    [messages],
+  );
 
   const send = React.useCallback(
     async (text: string) => {
@@ -134,6 +151,20 @@ export default function NewCampaignPage() {
       void send(initial);
     }
   }, [location.state, workspaceId, brandId, conversationId, send]);
+
+  /**
+   * Responder por clique.
+   *
+   * A resposta vai para a conversa como texto normal — o modelo não precisa
+   * saber se veio de um botão ou do teclado, e a conversa continua legível
+   * para quem reabrir a campanha depois.
+   */
+  const responderPergunta = React.useCallback(
+    (pergunta: string, resposta: string) => {
+      void send(`${pergunta} ${resposta}`);
+    },
+    [send],
+  );
 
   async function confirmBrief(brief: Brief) {
     if (!workspaceId || !brandId || !user) return;
@@ -201,8 +232,8 @@ export default function NewCampaignPage() {
   if (history.isLoading) return <LoadingBlock label="Recuperando a conversa" className="min-h-[60dvh]" />;
 
   return (
-    <div className="mx-auto flex min-h-full w-full max-w-[760px] flex-col px-5 py-6 md:px-8 md:py-8">
-      <div className="mb-6 flex items-start gap-4">
+    <div className="mx-auto flex h-full w-full max-w-[760px] flex-col px-5 pb-5 pt-6 md:px-8 md:pb-6 md:pt-8">
+      <div className="mb-6 flex shrink-0 items-start gap-4">
         <div className="flex flex-col gap-1.5">
           <MonoLabel className="text-accent">Nova campanha</MonoLabel>
           <h1 className="text-[24px] font-normal tracking-[-0.02em] text-ink md:text-[28px]">
@@ -215,13 +246,13 @@ export default function NewCampaignPage() {
       </div>
 
       {campaignsLeft !== null && campaignsLeft <= 0 && (
-        <Notice tone="warning" className="mb-4">
+        <Notice tone="warning" className="mb-4 shrink-0">
           Você já usou todas as campanhas do ciclo. É possível conversar e montar o briefing, mas a geração
           dos caminhos vai pedir a renovação do plano.
         </Notice>
       )}
 
-      <div className="flex flex-1 flex-col gap-5">
+      <div className="scroll-slim -mr-2 flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto pb-1 pr-2">
         {messages.length === 0 && !sending && (
           <div className="flex flex-col gap-3 rounded-[14px] border border-dashed border-line p-5">
             <p className="text-[14px] leading-relaxed text-ink-2">
@@ -229,11 +260,7 @@ export default function NewCampaignPage() {
               não precisa repetir produto, tom nem público.
             </p>
             <div className="flex flex-col gap-1.5">
-              {[
-                "Quero uma campanha para divulgar nosso café especial no Dia dos Pais.",
-                "Crie anúncios para nosso software focando na redução de tarefas manuais.",
-                "Preciso de 6 stories para a promoção desta semana.",
-              ].map((example) => (
+              {sugestoes.map((example) => (
                 <button
                   key={example}
                   type="button"
@@ -269,20 +296,11 @@ export default function NewCampaignPage() {
             </div>
 
             {message.questions && message.questions.length > 0 && (
-              <ul className="flex flex-col gap-1.5 pl-1">
-                {message.questions.map((question) => (
-                  <li key={question}>
-                    <button
-                      type="button"
-                      onClick={() => setDraft(question)}
-                      className="flex items-start gap-2 text-left text-[13px] text-ink-2 transition-colors hover:text-accent"
-                    >
-                      <span aria-hidden className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-accent" />
-                      {question}
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <Perguntas
+                perguntas={message.questions}
+                ativo={message.id === ultimaResposta}
+                aoResponder={responderPergunta}
+              />
             )}
 
             {message.brief && (
@@ -329,7 +347,7 @@ export default function NewCampaignPage() {
           event.preventDefault();
           void send(draft);
         }}
-        className="sticky bottom-0 mt-6 flex flex-col gap-3 rounded-[16px] border border-line-strong bg-card p-4"
+        className="mt-5 shrink-0 flex flex-col gap-3 rounded-[16px] border border-line-strong bg-card p-4"
       >
         <label htmlFor="mensagem" className="sr-only">
           Sua mensagem
@@ -360,10 +378,56 @@ export default function NewCampaignPage() {
         </div>
       </form>
 
-      <p className="mt-3 flex items-center justify-center gap-2 text-[12px] text-ink-faint">
+      <p className="mt-3 flex shrink-0 items-center justify-center gap-2 text-[12px] text-ink-faint">
         <Sparkles className="h-3 w-3" aria-hidden />
         Imagens só são geradas depois que você confirmar o briefing e escolher os caminhos.
       </p>
     </div>
+  );
+}
+
+/**
+ * As perguntas da entrevista, com as respostas prontas para clicar.
+ *
+ * As opções vêm da memória da marca — produtos, públicos e canais que existem
+ * de verdade. O campo de texto continua ali embaixo: opção é atalho, não
+ * camisa de força, e pergunta aberta o bastante vem sem nenhuma.
+ */
+function Perguntas({
+  perguntas,
+  ativo,
+  aoResponder,
+}: {
+  perguntas: ChatQuestion[];
+  ativo: boolean;
+  aoResponder: (pergunta: string, resposta: string) => void;
+}) {
+  return (
+    <ul className={cn("flex flex-col gap-3 pl-1", !ativo && "pointer-events-none opacity-45")}>
+      {perguntas.map((item) => (
+        <li key={item.question} className="flex flex-col gap-1.5">
+          <span className="flex items-start gap-2 text-[13px] text-ink-2">
+            <span aria-hidden className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-accent" />
+            {item.question}
+          </span>
+
+          {item.options.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 pl-3.5">
+              {item.options.map((opcao) => (
+                <button
+                  key={opcao}
+                  type="button"
+                  disabled={!ativo}
+                  onClick={() => aoResponder(item.question, opcao)}
+                  className="surgir rounded-full border border-line bg-surface px-3 py-1.5 text-[12.5px] text-ink-2 transition-colors hover:border-accent hover:text-ink disabled:cursor-default"
+                >
+                  {opcao}
+                </button>
+              ))}
+            </div>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }

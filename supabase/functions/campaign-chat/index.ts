@@ -12,7 +12,8 @@ const bodySchema = z.object({
   workspace_id: z.string().uuid(),
   brand_id: z.string().uuid(),
   conversation_id: z.string().uuid().nullable().optional(),
-  message: z.string().trim().min(2).max(4000),
+  // Uma resposta legítima cabe em um caractere só ("6" para "quantas peças?").
+  message: z.string().trim().min(1).max(4000),
 });
 
 const HISTORY_LIMIT = 20;
@@ -22,7 +23,10 @@ export const handler = serveJson(async (request) => {
     const admin = adminClient();
 
     const parsed = bodySchema.safeParse(await request.json().catch(() => null));
-    if (!parsed.success) throw errors.invalid("Envie a marca e a mensagem da conversa.");
+    if (!parsed.success) {
+      // Os detalhes dizem qual campo caiu — sem eles o erro é indistinguível na tela.
+      throw errors.invalid("Envie a marca e a mensagem da conversa.", parsed.error.flatten());
+    }
     const { workspace_id: workspaceId, brand_id: brandId, message } = parsed.data;
 
     await requireMembership(admin, caller.userId, workspaceId);

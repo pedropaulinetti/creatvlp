@@ -172,7 +172,9 @@ async function fetchGuarded(
 
       if (!response.ok) {
         await response.body?.cancel();
-        throw errors.invalid(`A página respondeu ${response.status}. Você pode preencher os dados manualmente.`);
+        throw errors.invalid(
+          `A página respondeu ${response.status} e não deixou ler. Me conte da marca que eu monto daqui.`,
+        );
       }
 
       const contentType = response.headers.get("content-type") ?? "";
@@ -207,10 +209,41 @@ export async function fetchPublicPage(rawUrl: string): Promise<{ url: string; ht
   } catch (error) {
     if (error instanceof AppError) throw error;
     if (error instanceof DOMException && error.name === "AbortError") {
-      throw errors.invalid("A página demorou demais para responder. Preencha os dados manualmente.");
+      throw errors.invalid("A página demorou demais para responder. Me conte da marca que eu monto daqui.");
     }
-    throw errors.invalid("Não conseguimos ler essa página. Preencha os dados manualmente.");
+    throw errors.invalid("Não conseguimos ler essa página. Me conte da marca que eu monto daqui.");
   }
+}
+
+/**
+ * Conteúdo embutido no próprio HTML, em `data:`.
+ *
+ * Muito site moderno serve o logo assim — um SVG inteiro dentro do `src`. Não
+ * há rede envolvida, então nada disso passa pelas proteções de SSRF: é texto
+ * que já estava na página que acabamos de ler.
+ */
+export function decodeDataUrl(url: string, maxBytes = 400_000): { bytes: Uint8Array; mimeType: string } | null {
+  const match = /^data:([^;,]+)(;charset=[^;,]+)?(;base64)?,([\s\S]*)$/i.exec(url.trim());
+  if (!match) return null;
+
+  const mimeType = match[1].toLowerCase();
+  const base64 = Boolean(match[3]);
+  const dado = match[4];
+
+  try {
+    const bytes = base64
+      ? Uint8Array.from(atob(dado), (c) => c.charCodeAt(0))
+      : new TextEncoder().encode(decodeURIComponent(dado));
+    return bytes.length > maxBytes ? null : { bytes, mimeType };
+  } catch {
+    return null;
+  }
+}
+
+/** O texto de um `data:` de SVG, para ler as cores da marca sem baixar nada. */
+export function decodeDataUrlText(url: string): string {
+  const conteudo = decodeDataUrl(url);
+  return conteudo ? new TextDecoder().decode(conteudo.bytes) : "";
 }
 
 /** Baixa uma imagem pública (logo do site) com os mesmos limites. */

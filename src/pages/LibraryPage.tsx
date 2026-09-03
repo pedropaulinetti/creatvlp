@@ -12,6 +12,7 @@ import { Select, Checkbox } from "@/components/ui/controls";
 import { Dialog, DialogContent, DialogFooter } from "@/components/ui/overlays";
 import { EmptyState, ErrorState, LoadingBlock } from "@/components/ui/states";
 import { AssetCard } from "@/features/creatives/AssetCard";
+import { agruparPorIdeia } from "@/features/creatives/agrupar";
 import { CreativeCanvas, emptyComposition, type Composition } from "@/features/creatives/CreativeCanvas";
 import { useAssetActions } from "@/features/creatives/mutations";
 import { useSignedUrls, useBrandLogoUrl } from "@/features/creatives/useAssetUrls";
@@ -158,7 +159,7 @@ export default function LibraryPage() {
   });
 
   const assets = React.useMemo(() => (query.data?.pages ?? []).flat(), [query.data]);
-  const urls = useSignedUrls("creative-assets", assets.map((asset) => asset.base_path));
+  const urls = useSignedUrls("creative-assets", assets.flatMap((asset) => [asset.base_path, asset.generated_path]));
 
   const createFolder = useMutation({
     mutationFn: async (name: string) => {
@@ -411,17 +412,29 @@ export default function LibraryPage() {
         <>
           {view === "grid" ? (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {assets.map((asset) => (
+              {agruparPorIdeia(assets).map(({ principal, irmas }) => (
                 <AssetCard
-                  key={asset.id}
-                  asset={asset}
+                  key={principal.id}
+                  asset={principal}
+                  irmas={irmas}
                   compact
-                  imageUrl={urls.data?.get(asset.base_path ?? "") ?? null}
+                  imageUrl={urls.data?.get(principal.base_path ?? "") ?? null}
+                  generatedUrl={urls.data?.get(principal.generated_path ?? "") ?? null}
+                  urlPorFormato={
+                    new Map(
+                      [principal, ...irmas].flatMap((item) => {
+                        const url = urls.data?.get(item.generated_path ?? "");
+                        return url ? [[item.format, url] as [string, string]] : [];
+                      }),
+                    )
+                  }
                   logoUrl={logo.data ?? null}
-                  selected={selected.includes(asset.id)}
+                  selected={selected.includes(principal.id)}
                   onSelectedChange={(value) =>
                     setSelected((current) =>
-                      value ? [...current, asset.id] : current.filter((id) => id !== asset.id),
+                      value
+                        ? [...current, principal.id]
+                        : current.filter((id) => id !== principal.id),
                     )
                   }
                 />

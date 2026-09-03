@@ -6,7 +6,7 @@
 import { z } from "npm:zod@3.23.8";
 import { serveJson, json, errors } from "../_shared/http.ts";
 import { adminClient, requireUser, requireMembership } from "../_shared/auth.ts";
-import { runDirections, runImages, briefFromRoutine } from "../_shared/pipeline.ts";
+import { runDirections, runImages, briefFromRoutine, MAX_PECAS_POR_CHAMADA } from "../_shared/pipeline.ts";
 import { notify } from "../_shared/notify.ts";
 import { auditLog } from "../_shared/jobs.ts";
 import { availableCredits } from "../_shared/credits.ts";
@@ -117,7 +117,8 @@ export const handler = serveJson(async (request) => {
             campaignId,
             brandId: routine.brand_id,
             userId: routine.created_by,
-            count: 4,
+            // Sem count: o número de caminhos sai da quantidade do briefing,
+            // que a rotina já preencheu com a sua própria configuração.
             routineRunId: run.id,
           });
           generatedDirections = (directions.directions as unknown[]).length;
@@ -125,11 +126,13 @@ export const handler = serveJson(async (request) => {
           // Imagem só sai com autorização explícita na rotina E saldo suficiente.
           if (routine.allow_image_generation) {
             const ids = (directions.directions as Array<{ id: string }>)
-              .slice(0, Math.min(routine.quantity, 5))
+              .slice(0, 5)
               .map((direction) => direction.id);
+            // A rotina entrega o que foi configurado, dentro do teto da função.
+            const pedidas = Math.min(routine.quantity, MAX_PECAS_POR_CHAMADA);
             const available = await availableCredits(admin, routine.workspace_id, "imagem");
 
-            if (available >= ids.length && ids.length > 0) {
+            if (available >= pedidas && ids.length > 0) {
               const images = await runImages(admin, {
                 workspaceId: routine.workspace_id,
                 campaignId,
@@ -137,8 +140,7 @@ export const handler = serveJson(async (request) => {
                 userId: routine.created_by,
                 directionIds: ids,
                 formats: routine.formats ?? ["4:5"],
-                templateKey: "produto-destaque",
-                copyVariant: 0,
+                quantidade: pedidas,
                 idempotencyKey: `rotina:${run.id}:imagens`,
                 routineRunId: run.id,
               });
