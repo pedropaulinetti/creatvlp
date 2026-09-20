@@ -33,11 +33,38 @@ export function RequireSupabaseOutlet() {
 }
 
 export function RequireAuth() {
-  const { ready, session } = useAuth();
+  const { ready, session, profile, signOut } = useAuth();
   const location = useLocation();
 
   if (!ready) return <FullPage><LoadingBlock label="Verificando seu acesso" /></FullPage>;
   if (!session) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
+
+  /*
+   * Só bloqueia diante do estado explícito. Enquanto o perfil não chegou ele é
+   * nulo, e tratar nulo como bloqueado faria a tela piscar em todo carregamento.
+   * A trava que vale está na Edge Function; esta aqui é para a pessoa entender
+   * o que houve em vez de ver tudo falhar.
+   */
+  if (profile?.access_status === "bloqueado") {
+    return (
+      <FullPage>
+        <div className="flex max-w-[420px] flex-col items-start gap-4">
+          <ErrorState
+            title="Conta bloqueada"
+            description={
+              profile.blocked_reason
+                ? `Motivo: ${profile.blocked_reason}. Fale com quem administra o CreatvOS para reativar.`
+                : "Fale com quem administra o CreatvOS para reativar seu acesso."
+            }
+          />
+          <Button variant="outline" size="sm" onClick={() => void signOut()}>
+            Sair
+          </Button>
+        </div>
+      </FullPage>
+    );
+  }
+
   return <Outlet />;
 }
 

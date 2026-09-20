@@ -287,6 +287,71 @@ describe("pecaCompletaPrompt", () => {
   });
 
   /*
+   * O papel invertido era o que fazia toda peça sair preta: `ink` é a cor do
+   * TEXTO, e o prompt a pedia "como fundo escuro". Numa marca de fundo branco
+   * isso mandava pintar a peça inteira de preto.
+   */
+  it("chama o fundo de fundo e o texto de texto", () => {
+    const daMemoe = {
+      ...peca,
+      palette: { ink: "#000000", surface: "#FFFFFF", accent: "#F5B700" },
+    };
+    const prompt = pecaCompletaPrompt(daMemoe, brand);
+    expect(prompt).toContain("#FFFFFF é a cor de fundo");
+    expect(prompt).toContain("#000000 é a cor do texto");
+    expect(prompt).not.toContain("#000000 como fundo escuro");
+  });
+
+  it("diz qual das duas é a clara, para o modelo montar o contraste", () => {
+    const prompt = pecaCompletaPrompt(
+      { ...peca, palette: { ink: "#000000", surface: "#FFFFFF", accent: "#F5B700" } },
+      brand,
+    );
+    expect(prompt).toContain("(clara)");
+    expect(prompt).toContain("(escura)");
+  });
+
+  it("marca de fundo escuro não é forçada a clarear", () => {
+    const prompt = pecaCompletaPrompt(
+      { ...peca, palette: { ink: "#FFFDFA", surface: "#171412", accent: "#B4623A" } },
+      brand,
+    );
+    expect(prompt).toContain("#171412 é a cor de fundo (escura)");
+  });
+
+  /*
+   * "sem serifa geométrica" estava fixo e vencia o nome da fonte pedido na
+   * mesma frase: Kefir é display arredondada, Commissioner é sans de baixo
+   * contraste, e as duas saíam como uma sans genérica.
+   */
+  it("nomeia a tipografia sem classificá-la por conta própria", () => {
+    const prompt = pecaCompletaPrompt(
+      { ...peca, typography: { headline: "Kefir", body: "Commissioner" } },
+      brand,
+    );
+    expect(prompt).toContain("Kefir no título");
+    expect(prompt).toContain("Commissioner no texto de apoio");
+    expect(prompt).not.toContain("sem serifa geométrica");
+  });
+
+  it("fonte única não é repetida como se fossem duas", () => {
+    const prompt = pecaCompletaPrompt(
+      { ...peca, typography: { headline: "Inter", body: "Inter" } },
+      brand,
+    );
+    expect(prompt).toContain("Inter no título.");
+    expect(prompt).not.toContain("e Inter no texto");
+  });
+
+  it("sem tipografia definida, não inventa instrução de fonte", () => {
+    const prompt = pecaCompletaPrompt(
+      { ...peca, typography: { headline: "", body: "" } },
+      brand,
+    );
+    expect(prompt).not.toContain("Tipografia:");
+  });
+
+  /*
    * Sem foto, letra no produto é invenção do modelo e tem de ser proibida.
    * Com foto, o rótulo é o produto — apagá-lo é entregar frasco genérico.
    */

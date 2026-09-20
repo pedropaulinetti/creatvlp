@@ -304,6 +304,7 @@ export type Database = {
           kind: string
           label: string
           mime_type: string
+          position: number
           size_bytes: number
           storage_path: string
           width: number | null
@@ -320,6 +321,7 @@ export type Database = {
           kind: string
           label?: string
           mime_type: string
+          position?: number
           size_bytes: number
           storage_path: string
           width?: number | null
@@ -336,6 +338,7 @@ export type Database = {
           kind?: string
           label?: string
           mime_type?: string
+          position?: number
           size_bytes?: number
           storage_path?: string
           width?: number | null
@@ -1132,6 +1135,63 @@ export type Database = {
           },
         ]
       }
+      feedback: {
+        Row: {
+          context: Json
+          created_at: string
+          handled_at: string | null
+          handled_by: string | null
+          id: string
+          kind: string
+          message: string
+          path: string
+          status: string
+          user_id: string | null
+          workspace_id: string | null
+        }
+        Insert: {
+          context?: Json
+          created_at?: string
+          handled_at?: string | null
+          handled_by?: string | null
+          id?: string
+          kind?: string
+          message: string
+          path?: string
+          status?: string
+          user_id?: string | null
+          workspace_id?: string | null
+        }
+        Update: {
+          context?: Json
+          created_at?: string
+          handled_at?: string | null
+          handled_by?: string | null
+          id?: string
+          kind?: string
+          message?: string
+          path?: string
+          status?: string
+          user_id?: string | null
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "feedback_author_profile_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "feedback_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       folders: {
         Row: {
           created_at: string
@@ -1382,6 +1442,60 @@ export type Database = {
         }
         Relationships: []
       }
+      product_images: {
+        Row: {
+          bucket: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          label: string
+          position: number
+          product_id: string
+          storage_path: string
+          workspace_id: string
+        }
+        Insert: {
+          bucket?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          label?: string
+          position?: number
+          product_id: string
+          storage_path: string
+          workspace_id: string
+        }
+        Update: {
+          bucket?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          label?: string
+          position?: number
+          product_id?: string
+          storage_path?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_images_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_images_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           brand_id: string
@@ -1453,7 +1567,11 @@ export type Database = {
       }
       profiles: {
         Row: {
+          access_status: Database["public"]["Enums"]["access_status"]
           avatar_url: string | null
+          blocked_at: string | null
+          blocked_by: string | null
+          blocked_reason: string
           created_at: string
           email: string | null
           full_name: string
@@ -1463,7 +1581,11 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          access_status?: Database["public"]["Enums"]["access_status"]
           avatar_url?: string | null
+          blocked_at?: string | null
+          blocked_by?: string | null
+          blocked_reason?: string
           created_at?: string
           email?: string | null
           full_name?: string
@@ -1473,7 +1595,11 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          access_status?: Database["public"]["Enums"]["access_status"]
           avatar_url?: string | null
+          blocked_at?: string | null
+          blocked_by?: string | null
+          blocked_reason?: string
           created_at?: string
           email?: string | null
           full_name?: string
@@ -1930,6 +2056,39 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_account_feedback: {
+        Args: { p_workspace: string }
+        Returns: {
+          criado_em: string
+          formato: string
+          motivo: string
+        }[]
+      }
+      admin_accounts: {
+        Args: never
+        Returns: {
+          access_status: Database["public"]["Enums"]["access_status"]
+          assets_approved: number
+          assets_rejected: number
+          assets_total: number
+          blocked_reason: string
+          bonus_images: number
+          campaigns_used: number
+          email: string
+          failed_jobs_7d: number
+          full_name: string
+          images_limit: number
+          images_used: number
+          joined_at: string
+          last_activity: string
+          period_end: string
+          plan: Database["public"]["Enums"]["plan_key"]
+          platform_role: Database["public"]["Enums"]["platform_role"]
+          user_id: string
+          workspace_id: string
+          workspace_name: string
+        }[]
+      }
       admin_cost_by_model: {
         Args: { p_days?: number }
         Returns: {
@@ -2028,6 +2187,33 @@ export type Database = {
         Args: { p_complete?: boolean; p_draft_token: string; p_payload: Json }
         Returns: string
       }
+      set_account_access: {
+        Args: {
+          p_reason?: string
+          p_status: Database["public"]["Enums"]["access_status"]
+          p_user: string
+        }
+        Returns: {
+          access_status: Database["public"]["Enums"]["access_status"]
+          avatar_url: string | null
+          blocked_at: string | null
+          blocked_by: string | null
+          blocked_reason: string
+          created_at: string
+          email: string | null
+          full_name: string
+          id: string
+          onboarding_completed_at: string | null
+          platform_role: Database["public"]["Enums"]["platform_role"]
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "profiles"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       trigger_run_routines: { Args: never; Returns: undefined }
       workspace_role: {
         Args: { p_workspace: string }
@@ -2035,6 +2221,7 @@ export type Database = {
       }
     }
     Enums: {
+      access_status: "ativo" | "bloqueado"
       campaign_status:
         | "rascunho"
         | "em_briefing"
@@ -2188,6 +2375,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      access_status: ["ativo", "bloqueado"],
       campaign_status: [
         "rascunho",
         "em_briefing",

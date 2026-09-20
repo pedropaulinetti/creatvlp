@@ -170,7 +170,13 @@ function reduzir(atual: Leitura, { etapa, estado, dados }: EtapaFuncao): Leitura
       return { ...proxima, cores: (d.cores as Leitura["cores"]) ?? atual.cores };
     case "tipografia": {
       const fonts = d.fonts as { headline?: string; body?: string } | undefined;
-      return { ...proxima, fontes: { headline: fonts?.headline ?? "", body: fonts?.body ?? "" } };
+      // A etapa chega duas vezes: nomes primeiro, arquivos depois de guardados.
+      const arquivos = d.font_paths as Leitura["arquivosDeFonte"] | undefined;
+      return {
+        ...proxima,
+        fontes: { headline: fonts?.headline ?? "", body: fonts?.body ?? "" },
+        arquivosDeFonte: arquivos?.length ? arquivos : atual.arquivosDeFonte,
+      };
     }
     case "logo": {
       const logo = d.logo as { url?: string } | null | undefined;
@@ -218,6 +224,7 @@ function comResposta(atual: Leitura, resposta: RespostaAnalise): Leitura {
     fontes: ds?.fonts.headline || ds?.fonts.body
       ? { headline: ds.fonts.headline, body: ds.fonts.body }
       : atual.fontes,
+    arquivosDeFonte: ds?.font_paths?.length ? ds.font_paths : atual.arquivosDeFonte,
     logoPath: ds?.logo_path ?? atual.logoPath,
     logoUrl: ds?.logo?.url ?? atual.logoUrl,
     paginas: resposta.pages?.slice(1) ?? atual.paginas,

@@ -134,12 +134,87 @@ export default function OnboardingPage() {
         resourceType: "produto",
         file: arquivo,
       });
-      const produtos = draft.products.map((produto, i) =>
-        i === indice ? { ...produto, imagePath: caminho } : produto,
-      );
+      /*
+       * A nova foto entra no fim da galeria; a principal só muda se ainda não
+       * havia nenhuma. Quem sobe a segunda foto não quer trocar a capa sem
+       * pedir.
+       */
+      const produtos = draft.products.map((produto, i) => {
+        if (i !== indice) return produto;
+        const atuais = produto.imagePaths ?? (produto.imagePath ? [produto.imagePath] : []);
+        if (atuais.includes(caminho)) return produto;
+        return {
+          ...produto,
+          imagePaths: [...atuais, caminho],
+          imagePath: produto.imagePath ?? caminho,
+        };
+      });
       aplicar({ products: produtos });
     } catch (falha) {
       setErroAoSalvar(falha instanceof Error ? falha.message : "Não foi possível enviar o arquivo.");
+    }
+  }
+
+  function removerFotoDeProduto(indice: number, caminho: string) {
+    const produtos = draft.products.map((produto, i) => {
+      if (i !== indice) return produto;
+      const restantes = (produto.imagePaths ?? []).filter((item) => item !== caminho);
+      return {
+        ...produto,
+        imagePaths: restantes,
+        // Apagar a principal promove a próxima, para o produto não ficar sem capa.
+        imagePath: produto.imagePath === caminho ? restantes[0] ?? null : produto.imagePath,
+      };
+    });
+    aplicar({ products: produtos });
+  }
+
+  function tornarFotoPrincipal(indice: number, caminho: string) {
+    const produtos = draft.products.map((produto, i) =>
+      i === indice
+        ? {
+            ...produto,
+            imagePath: caminho,
+            imagePaths: [caminho, ...(produto.imagePaths ?? []).filter((item) => item !== caminho)],
+          }
+        : produto,
+    );
+    aplicar({ products: produtos });
+  }
+
+  /*
+   * O arquivo da fonte vai para o Storage agora e só vira linha em
+   * `brand_assets` ao concluir — como o resto do rascunho, que não grava nada
+   * antes de a pessoa confirmar.
+   */
+  async function enviarFonte(arquivo: File, familia: string) {
+    if (!workspaceId) return;
+    setErroAoSalvar("");
+    try {
+      const caminho = await uploadBrandFile({
+        bucket: "brand-assets",
+        workspaceId,
+        brandId: draft.brandId,
+        resourceType: "fonte",
+        file: arquivo,
+        tipo: "fonte",
+      });
+      /*
+       * Acumula em vez de substituir: o acervo é a lista inteira, e quais duas
+       * valem agora é o que os botões de destaque e texto dizem.
+       */
+      aplicar({
+        fontFiles: [
+          ...draft.fontFiles.filter((fonte) => fonte.path !== caminho),
+          { path: caminho, familia, url: URL.createObjectURL(arquivo) },
+        ],
+        // A primeira enviada assume os dois papéis, que é o caso comum.
+        typography: draft.typography.headline
+          ? draft.typography
+          : { headline: familia, body: draft.typography.body || familia },
+      });
+    } catch (falha) {
+      setErroAoSalvar(falha instanceof Error ? falha.message : "Não foi possível enviar a fonte.");
     }
   }
 
@@ -209,6 +284,9 @@ export default function OnboardingPage() {
             aoConfirmar={concluir}
             aoEnviarLogo={enviarLogo}
             aoEnviarFotoDeProduto={enviarFotoDeProduto}
+            aoRemoverFotoDeProduto={removerFotoDeProduto}
+            aoTornarFotoPrincipal={tornarFotoPrincipal}
+            aoEnviarFonte={enviarFonte}
             aoRecomecar={() => {
               setErro("");
               setFase("site");

@@ -81,7 +81,12 @@ describe("a leitura manda no que ela mesma produz", () => {
           products: [{
             name: "Bourbon Amarelo", description: "", price_cents: 4900,
             image: "https://loja.com.br/bourbon.jpg",
-            image_path: "workspace/marca/produto/bourbon.jpg", highlights: [],
+            image_path: "workspace/marca/produto/bourbon.jpg",
+            image_paths: [
+              "workspace/marca/produto/bourbon.jpg",
+              "workspace/marca/produto/bourbon-verso.jpg",
+            ],
+            highlights: [],
           }],
         },
       }),
@@ -99,6 +104,11 @@ describe("a leitura manda no que ela mesma produz", () => {
         url: null,
         highlights: [],
         imagePath: "workspace/marca/produto/bourbon.jpg",
+        // A galeria inteira vem da leitura: um produto tem frente, verso e uso.
+        imagePaths: [
+          "workspace/marca/produto/bourbon.jpg",
+          "workspace/marca/produto/bourbon-verso.jpg",
+        ],
         imageUrl: "https://loja.com.br/bourbon.jpg",
       },
     ]);
@@ -159,5 +169,123 @@ describe("catálogo lido de qualquer plataforma", () => {
 
     expect(campos.products?.[0]).toMatchObject({ name: "Sérum de Vitamina C", priceCents: 8990 });
     expect(campos.company).toBe("Loja");
+  });
+});
+
+describe("galeria do produto vinda da leitura", () => {
+  it("sem image_paths, a foto principal vira uma galeria de uma", () => {
+    const campos = camposDaLeitura(
+      "https://loja.com.br",
+      resposta({
+        shopify: {
+          vendor: "Loja", currency: "BRL", product_types: [],
+          products: [{
+            name: "Prensa", description: "", price_cents: 9700,
+            image: "https://loja.com.br/p.jpg",
+            image_path: "w/m/produto/p.jpg", highlights: [],
+          }],
+        },
+      }),
+      rascunhoVazio(),
+    );
+    expect(campos.products?.[0].imagePaths).toEqual(["w/m/produto/p.jpg"]);
+  });
+
+  it("produto sem foto nenhuma tem galeria vazia, não nula", () => {
+    const campos = camposDaLeitura(
+      "https://loja.com.br",
+      resposta({
+        shopify: {
+          vendor: "Loja", currency: "BRL", product_types: [],
+          products: [{ name: "Assinatura", description: "", price_cents: null, image: null, highlights: [] }],
+        },
+      }),
+      rascunhoVazio(),
+    );
+    expect(campos.products?.[0].imagePaths).toEqual([]);
+  });
+});
+
+describe("as fontes do site chegam ao rascunho", () => {
+  it("mapeia os arquivos baixados pela leitura", () => {
+    const campos = camposDaLeitura(
+      "https://memoe.com.br",
+      resposta({
+        design_system: {
+          colors: [],
+          fonts: { headline: "Kefir", body: "Commissioner", candidates: [] },
+          stylesheets: 1,
+          logo: null,
+          logo_path: null,
+          font_paths: [
+            { familia: "Kefir", path: "w/m/fonte/kefir.woff2" },
+            { familia: "Commissioner", path: "w/m/fonte/commissioner.woff2" },
+          ],
+        },
+      }),
+      rascunhoVazio(),
+    );
+
+    // Sem isto a tela escreve "Kefir" na fonte do sistema: o nome vem, o
+    // arquivo não, e quem confere a marca não vê a tipografia dela.
+    expect(campos.fontFiles).toEqual([
+      { path: "w/m/fonte/kefir.woff2", familia: "Kefir" },
+      { path: "w/m/fonte/commissioner.woff2", familia: "Commissioner" },
+    ]);
+    expect(campos.typography).toEqual({ headline: "Kefir", body: "Commissioner" });
+  });
+
+  it("função antiga, sem font_paths, não quebra a leitura", () => {
+    const campos = camposDaLeitura(
+      "https://loja.com.br",
+      resposta({
+        design_system: {
+          colors: [], fonts: { headline: "Inter", body: "Inter", candidates: [] },
+          stylesheets: 1, logo: null, logo_path: null,
+        },
+      }),
+      rascunhoVazio(),
+    );
+    expect(campos.fontFiles).toEqual([]);
+  });
+});
+
+/**
+ * A etapa de tipografia é anunciada duas vezes: os nomes saem do CSS logo no
+ * começo, e os arquivos só existem depois de baixados e guardados. O segundo
+ * anúncio é o que deixa a tela escrever a família na letra dela, então ele não
+ * pode ser descartado nem apagar o que o primeiro trouxe.
+ */
+describe("arquivos de fonte na leitura", () => {
+  it("chega ao rascunho pelo payload completo", () => {
+    const campos = camposDaLeitura(
+      "https://memoe.com.br",
+      resposta({
+        design_system: design({
+          fonts: { headline: "Kefir", body: "Commissioner", candidates: [] },
+          font_paths: [
+            { familia: "Kefir", path: "w/b/fonte/1.woff2" },
+            { familia: "Commissioner", path: "w/b/fonte/2.woff2" },
+          ],
+        }),
+      }),
+      rascunhoVazio(),
+    );
+
+    expect(campos.typography).toEqual({ headline: "Kefir", body: "Commissioner" });
+    expect(campos.fontFiles).toEqual([
+      { path: "w/b/fonte/1.woff2", familia: "Kefir" },
+      { path: "w/b/fonte/2.woff2", familia: "Commissioner" },
+    ]);
+  });
+
+  it("fica vazio quando a função não devolveu arquivo nenhum", () => {
+    const campos = camposDaLeitura(
+      "https://exemplo.com",
+      resposta({ design_system: design({ fonts: { headline: "Rubik", body: "Inter", candidates: [] } }) }),
+      rascunhoVazio(),
+    );
+
+    expect(campos.fontFiles).toEqual([]);
   });
 });

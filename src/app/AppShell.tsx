@@ -14,7 +14,7 @@ import {
   Settings,
   Gauge,
 } from "lucide-react";
-import { Logo, LogoMark } from "@/components/Logo";
+import { BetaTag, Logo, LogoMark } from "@/components/Logo";
 import { BrandSwitcher } from "@/app/BrandSwitcher";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,20 +28,29 @@ import {
 import { useAuth } from "@/features/auth/AuthProvider";
 import { useWorkspace } from "@/features/workspace/WorkspaceProvider";
 import { useNotifications } from "@/features/notifications/useNotifications";
+import { BotaoDeFeedback } from "@/features/feedback/BotaoDeFeedback";
 import { cn, initials } from "@/lib/utils";
 
-const NAV = [
+type NavItem = {
+  to: string;
+  label: string;
+  short: string;
+  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+  end: boolean;
+  soon?: boolean;
+};
+
+const NAV: NavItem[] = [
   { to: "/app", label: "Início", short: "Início", icon: Home, end: true },
   { to: "/app/campanhas", label: "Campanhas", short: "Campanhas", icon: Megaphone, end: false },
-  { to: "/app/rotinas", label: "Rotinas", short: "Rotinas", icon: RotateCw, end: false },
+  { to: "/app/rotinas", label: "Rotinas", short: "Rotinas", icon: RotateCw, end: false, soon: true },
   { to: "/app/biblioteca", label: "Biblioteca", short: "Biblioteca", icon: Library, end: false },
   { to: "/app/marca", label: "Minha Marca", short: "Marca", icon: CircleDot, end: false },
-] as const;
+];
 
 const BREADCRUMB: Record<string, string> = {
   "/app": "Início",
   "/app/campanhas": "Campanhas",
-  "/app/rotinas": "Rotinas",
   "/app/biblioteca": "Biblioteca",
   "/app/marca": "Minha Marca",
   "/app/configuracoes": "Configurações",
@@ -206,8 +215,13 @@ export function AppShell() {
         )}
       >
         <div className={cn("px-2 pb-[22px] pt-1", collapsed && "px-0 text-center")}>
-          <NavLink to="/app" aria-label="CreatvOS, ir para o início">
+          <NavLink
+            to="/app"
+            aria-label="CreatvOS, versão beta, ir para o início"
+            className={cn("flex items-center gap-2", collapsed && "justify-center")}
+          >
             {collapsed ? <LogoMark height={18} className="mx-auto" /> : <Logo />}
+            {!collapsed && <BetaTag />}
           </NavLink>
         </div>
 
@@ -222,26 +236,48 @@ export function AppShell() {
         </Button>
 
         <nav className="flex flex-col gap-0.5" aria-label="Navegação principal">
-          {NAV.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) =>
-                cn(
-                  "flex h-9 items-center gap-2.5 rounded-[9px] px-2.5 text-[13.5px] transition-colors",
+          {NAV.map((item) =>
+            item.soon ? (
+              <span
+                key={item.to}
+                aria-disabled="true"
+                title={`${item.label} · em breve`}
+                className={cn(
+                  "flex h-9 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 text-[13.5px] text-ink-faint",
                   collapsed && "justify-center px-0",
-                  isActive
-                    ? "bg-active font-medium text-ink"
-                    : "text-ink-muted hover:bg-hover hover:text-ink",
-                )
-              }
-              title={collapsed ? item.label : undefined}
-            >
-              <item.icon className="h-[15px] w-[15px] shrink-0" aria-hidden strokeWidth={1.6} />
-              {!collapsed && item.label}
-            </NavLink>
-          ))}
+                )}
+              >
+                <item.icon className="h-[15px] w-[15px] shrink-0" aria-hidden strokeWidth={1.6} />
+                {!collapsed && (
+                  <>
+                    {item.label}
+                    <span className="ml-auto rounded-[5px] bg-sunken px-1.5 py-0.5 text-[10px] uppercase tracking-[0.04em] text-ink-faint">
+                      Em breve
+                    </span>
+                  </>
+                )}
+              </span>
+            ) : (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) =>
+                  cn(
+                    "flex h-9 items-center gap-2.5 rounded-[9px] px-2.5 text-[13.5px] transition-colors",
+                    collapsed && "justify-center px-0",
+                    isActive
+                      ? "bg-active font-medium text-ink"
+                      : "text-ink-muted hover:bg-hover hover:text-ink",
+                  )
+                }
+                title={collapsed ? item.label : undefined}
+              >
+                <item.icon className="h-[15px] w-[15px] shrink-0" aria-hidden strokeWidth={1.6} />
+                {!collapsed && item.label}
+              </NavLink>
+            ),
+          )}
         </nav>
 
         <div className="mt-auto">
@@ -263,8 +299,9 @@ export function AppShell() {
           </button>
           <span aria-hidden className="hidden h-4 w-px bg-line md:block" />
 
-          <NavLink to="/app" className="md:hidden" aria-label="CreatvOS">
+          <NavLink to="/app" className="flex items-center gap-1.5 md:hidden" aria-label="CreatvOS, versão beta">
             <Logo height={14} />
+            <BetaTag />
           </NavLink>
 
           <div className="hidden items-center gap-2 text-[12.5px] text-ink-faint md:flex">
@@ -287,27 +324,44 @@ export function AppShell() {
         </main>
       </div>
 
+      <BotaoDeFeedback />
+
       {/* Navegação inferior — mobile */}
       <nav
         aria-label="Navegação principal"
         className="fixed inset-x-0 bottom-0 z-30 flex h-[62px] items-center justify-around border-t border-line-soft bg-surface px-2.5 md:hidden"
       >
-        {NAV.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            className={({ isActive }) =>
-              cn(
-                "flex min-w-[64px] flex-col items-center gap-1 rounded-[8px] py-1.5 text-[10px] transition-colors",
-                isActive ? "text-ink" : "text-ink-faint",
-              )
-            }
-          >
-            <item.icon className="h-[18px] w-[18px]" aria-hidden strokeWidth={1.6} />
-            {item.short}
-          </NavLink>
-        ))}
+        {NAV.map((item) =>
+          item.soon ? (
+            <span
+              key={item.to}
+              aria-disabled="true"
+              aria-label={`${item.short}, em breve`}
+              className="flex min-w-[64px] cursor-default select-none flex-col items-center gap-0.5 rounded-[8px] py-1.5 text-[10px] text-line-contrast"
+            >
+              <item.icon className="h-[17px] w-[17px]" aria-hidden strokeWidth={1.6} />
+              {item.short}
+              <span aria-hidden className="text-[8.5px] uppercase tracking-[0.05em]">
+                Em breve
+              </span>
+            </span>
+          ) : (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              className={({ isActive }) =>
+                cn(
+                  "flex min-w-[64px] flex-col items-center gap-1 rounded-[8px] py-1.5 text-[10px] transition-colors",
+                  isActive ? "text-ink" : "text-ink-faint",
+                )
+              }
+            >
+              <item.icon className="h-[18px] w-[18px]" aria-hidden strokeWidth={1.6} />
+              {item.short}
+            </NavLink>
+          ),
+        )}
       </nav>
     </div>
   );

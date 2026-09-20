@@ -45,6 +45,26 @@ export const chatTurnSchema = z.object({
 });
 
 /**
+ * Apara em vez de rejeitar.
+ *
+ * Estes tetos são de desenho: quanto de texto cabe num balão, numa etiqueta,
+ * num título. Derrubar a geração inteira porque um balão veio com dez
+ * caracteres a mais é desproporcional — o prompt já pede o limite, e o que
+ * sobra ao schema é cortar a ponta, de preferência numa palavra inteira.
+ */
+const ateLimite = (limite: number, minimo = 0) =>
+  z
+    .string()
+    .trim()
+    .min(minimo)
+    .transform((texto) => {
+      if (texto.length <= limite) return texto;
+      const cortado = texto.slice(0, limite);
+      const espaco = cortado.lastIndexOf(" ");
+      return (espaco > limite * 0.6 ? cortado.slice(0, espaco) : cortado).trimEnd();
+    });
+
+/**
  * `null` conta como campo ausente.
  *
  * `.default()` do zod só age sobre `undefined`. O modelo, mandado deixar vazio
@@ -62,12 +82,12 @@ const copyBase = z.object({
    * sob controle de quem escreve — não do renderizador adivinhando qual palavra
    * importa. Sem marca nenhuma, a headline sai inteira na mesma cor.
    */
-  headline: semNulo(z.string().trim().max(120).default("")),
-  subheadline: semNulo(z.string().trim().max(160).default("")),
-  body: semNulo(z.string().trim().max(600).default("")),
+  headline: semNulo(ateLimite(120).default("")),
+  subheadline: semNulo(ateLimite(160).default("")),
+  body: semNulo(ateLimite(600).default("")),
   cta: z.string().trim().min(1).max(40),
   /** Itens curtos para os arquétipos de lista e de números. */
-  bullets: semNulo(z.array(z.string().trim().min(1).max(70)).max(5).default([])),
+  bullets: semNulo(z.array(ateLimite(70, 1)).max(5).default([])),
 
   /*
    * Formatos que não são título + apoio + botão.
@@ -83,12 +103,12 @@ const copyBase = z.object({
   formato: semNulo(z.enum(["titulo", "enquete", "conversa"]).default("titulo")),
 
   /** Enquete: a pergunta e as respostas, com o quanto cada uma foi votada. */
-  pergunta: semNulo(z.string().trim().max(120).default("")),
+  pergunta: semNulo(ateLimite(120).default("")),
   opcoes: semNulo(
     z
       .array(
         z.object({
-          texto: z.string().trim().min(1).max(40),
+          texto: ateLimite(40, 1),
           /*
            * Quantas pessoas marcaram essa resposta.
            *
@@ -109,13 +129,8 @@ const copyBase = z.object({
       .array(
         z.object({
           de: z.enum(["pessoa", "marca"]),
-          /*
-           * O limite que o prompt pede é 140; aqui ele é mais frouxo de
-           * propósito. Balão comprido desarruma o desenho, mas rejeitar a
-           * resposta inteira por dez caracteres a mais mata a campanha — o
-           * teto do schema é rede de segurança, não régua de estilo.
-           */
-          texto: z.string().trim().min(1).max(240),
+          // 140 é o que cabe no balão; o que passar disso é aparado, não rejeitado.
+          texto: ateLimite(140, 1),
         }),
       )
       .max(5)

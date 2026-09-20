@@ -43,23 +43,64 @@ export async function salvarMarca({
 
   const produtos = draft.products.filter((produto) => produto.name.trim());
   if (produtos.length) {
-    const { error } = await client.from("products").insert(
-      // Preço, moeda, endereço, destaques e foto vinham sendo descartados aqui:
-      // o catálogo era gravado só com nome e descrição.
-      produtos.map((produto) => ({
+    const { data: gravados, error } = await client
+      .from("products")
+      .insert(
+        // Preço, moeda, endereço, destaques e foto vinham sendo descartados aqui:
+        // o catálogo era gravado só com nome e descrição.
+        produtos.map((produto) => ({
+          workspace_id: workspaceId,
+          brand_id: draft.brandId,
+          name: produto.name.trim(),
+          description: produto.description.trim(),
+          price_cents: produto.priceCents ?? null,
+          currency: produto.currency || "BRL",
+          url: produto.url ?? null,
+          highlights: produto.highlights ?? [],
+          image_path: produto.imagePath ?? produto.imagePaths?.[0] ?? null,
+          created_by: userId,
+        })),
+      )
+      .select("id");
+    if (error) throw error;
+
+    /*
+     * A galeria só vira linha aqui: durante o onboarding as fotos já estão no
+     * Storage, mas o produto ainda não tem id. A ordem do rascunho é a ordem
+     * gravada, e a primeira continua sendo a principal.
+     */
+    const imagens = (gravados ?? []).flatMap((linha, indice) => {
+      const caminhos = produtos[indice]?.imagePaths ?? [];
+      const unicos = [...new Set(caminhos.filter(Boolean))];
+      return unicos.map((caminho, posicao) => ({
+        workspace_id: workspaceId,
+        product_id: linha.id,
+        storage_path: caminho,
+        position: posicao,
+        created_by: userId,
+      }));
+    });
+
+    if (imagens.length) {
+      const { error: erroDasImagens } = await client.from("product_images").insert(imagens);
+      if (erroDasImagens) throw erroDasImagens;
+    }
+  }
+
+  /* Os arquivos de fonte enviados na conferência. */
+  if (draft.fontFiles.length) {
+    await client.from("brand_assets").insert(
+      draft.fontFiles.map((fonte) => ({
         workspace_id: workspaceId,
         brand_id: draft.brandId,
-        name: produto.name.trim(),
-        description: produto.description.trim(),
-        price_cents: produto.priceCents ?? null,
-        currency: produto.currency || "BRL",
-        url: produto.url ?? null,
-        highlights: produto.highlights ?? [],
-        image_path: produto.imagePath ?? null,
+        kind: "fonte",
+        storage_path: fonte.path,
+        mime_type: "application/octet-stream",
+        size_bytes: 0,
+        label: fonte.familia,
         created_by: userId,
       })),
     );
-    if (error) throw error;
   }
 
   if (draft.audience.trim()) {

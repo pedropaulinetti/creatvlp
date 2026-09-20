@@ -28,11 +28,21 @@ export function camposDaLeitura(
     url: item.url ?? null,
     highlights: item.highlights ?? [],
     imagePath: item.image_path ?? null,
+    // A galeria já vem guardada da leitura; a primeira é a principal.
+    imagePaths: item.image_paths ?? (item.image_path ? [item.image_path] : []),
     imageUrl: item.image ?? null,
   }));
 
   return {
     website: endereco,
+    /*
+     * As fontes que a leitura baixou do site. É o que faz o nome da família
+     * aparecer escrito na própria letra, em vez de na fonte do sistema.
+     */
+    fontFiles: (ds?.font_paths ?? []).map((fonte) => ({
+      path: fonte.path,
+      familia: fonte.familia,
+    })),
     company: analysis.name || catalogo?.vendor || anterior.company,
     description: analysis.description || anterior.description,
     segment: analysis.segment || catalogo?.product_types?.[0] || anterior.segment,

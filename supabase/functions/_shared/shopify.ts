@@ -15,6 +15,11 @@ export type ShopifyProduct = {
   price_cents: number | null;
   url: string;
   image: string | null;
+  /*
+   * Todas as fotos, na ordem da loja. Um produto tem frente, verso e uso — e
+   * a peça fica melhor quando o modelo vê mais de um ângulo do mesmo objeto.
+   */
+  images: string[];
   highlights: string[];
   available: boolean;
 };
@@ -29,6 +34,20 @@ export type ShopifyStore = {
 };
 
 const EMPTY: ShopifyStore = { isShopify: false, vendor: "", currency: "BRL", products: [], productTypes: [], total: 0 };
+
+/**
+ * O domínio real da loja, quando o site é uma vitrine à parte.
+ *
+ * Loja headless publica em `marca.com.br` e guarda o catálogo em
+ * `marca.myshopify.com`. O `/products.json` do domínio público devolve 404, e
+ * a vitrine costuma ser uma SPA — o HTML chega com dez quilobytes e nenhum
+ * produto. O endereço da loja, porém, fica no próprio HTML ou no bundle, que é
+ * de onde a página o lê para montar a vitrine.
+ */
+export function dominioDaLoja(html: string): string | null {
+  const achado = html.match(/([a-z0-9][a-z0-9-]*)\.myshopify\.com/i);
+  return achado ? `https://${achado[1].toLowerCase()}.myshopify.com` : null;
+}
 
 /** Sinais no HTML. Confirmação real vem da resposta do /products.json. */
 export function looksLikeShopify(html: string): boolean {
@@ -136,6 +155,10 @@ export async function importShopifyStore(baseUrl: string, limit = 12, currency =
       price_cents: toCents(first.price),
       url: product.handle ? `${origin}/products/${product.handle}` : origin,
       image: images[0]?.src ? String(images[0].src) : null,
+      images: images
+        .map((imagem: { src?: unknown }) => (imagem?.src ? String(imagem.src) : ""))
+        .filter(Boolean)
+        .slice(0, 5),
       highlights: usefulTags(product.tags),
       available: variants.some((variant: Record<string, unknown>) => variant.available === true),
     });

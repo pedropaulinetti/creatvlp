@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  extractColors, extractFonts, extractLogo, extractImages,
+  extractColors, extractFonts, extractFontFiles, extractLogo, extractImages,
   extractSvgColors, mergeLogoColors,
 } from "../supabase/functions/_shared/design-system.ts";
 import { looksLikeShopify, detectCurrency } from "../supabase/functions/_shared/shopify.ts";
@@ -310,5 +310,56 @@ describe("detecção de Shopify", () => {
     expect(detectCurrency('Shopify.currency = {"active":"USD","rate":"1.0"}')).toBe("USD");
     expect(detectCurrency('{"currency":"BRL"}')).toBe("BRL");
     expect(detectCurrency("<html></html>")).toBe("BRL");
+  });
+});
+
+describe("extractFontFiles", () => {
+  const base = "https://marca.com.br/";
+
+  it("acha a família e o arquivo lado a lado no @font-face", () => {
+    const css = `@font-face{font-family:"Commissioner";src:url("/fonts/Commissioner-Regular.woff2") format("woff2")}`;
+    expect(extractFontFiles(css, base)).toEqual([
+      { familia: "Commissioner", url: "https://marca.com.br/fonts/Commissioner-Regular.woff2" },
+    ]);
+  });
+
+  /*
+   * O primeiro @font-face da família costuma ser o peso mais fino. Mostrar o
+   * nome da marca em Thin é mostrar um traço que não é o dela.
+   */
+  it("prefere o peso regular entre os vários da mesma família", () => {
+    const css = `
+      @font-face{font-family:"Kefir";font-weight:100;src:url("/f/kefir-thin.woff2")}
+      @font-face{font-family:"Kefir";font-weight:400;src:url("/f/kefir-regular.woff2")}
+      @font-face{font-family:"Kefir";font-weight:700;src:url("/f/kefir-bold.woff2")}`;
+    expect(extractFontFiles(css, base)[0].url).toContain("kefir-regular");
+  });
+
+  it("escolhe woff2 quando o src lista vários formatos", () => {
+    const css = `@font-face{font-family:"Inter";src:url("/f/i.woff") format("woff"),url("/f/i.woff2") format("woff2")}`;
+    expect(extractFontFiles(css, base)[0].url).toContain(".woff2");
+  });
+
+  it("ignora fonte embutida em base64", () => {
+    const css = `@font-face{font-family:"Embutida";src:url(data:font/woff2;base64,AAAA) format("woff2")}`;
+    expect(extractFontFiles(css, base)).toEqual([]);
+  });
+
+  it("ignora família genérica e nome interno de ícone", () => {
+    const css = `
+      @font-face{font-family:"sans-serif";src:url("/f/a.woff2")}
+      @font-face{font-family:"icomoon";src:url("/f/b.woff2")}`;
+    expect(extractFontFiles(css, base)).toEqual([]);
+  });
+
+  it("resolve endereço relativo contra a base", () => {
+    const css = `@font-face{font-family:"Rel";src:url("fonts/rel.woff2")}`;
+    expect(extractFontFiles(css, "https://marca.com.br/sobre/")[0].url).toBe(
+      "https://marca.com.br/sobre/fonts/rel.woff2",
+    );
+  });
+
+  it("sem @font-face, devolve lista vazia", () => {
+    expect(extractFontFiles("body{font-family:Inter}", base)).toEqual([]);
   });
 });

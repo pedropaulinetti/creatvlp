@@ -18,6 +18,15 @@ export type Caller = {
   token: string;
 };
 
+/*
+ * A conferência de bloqueio mora aqui dentro, e não numa função à parte, de
+ * propósito: toda Edge Function que gasta dinheiro passa por `requireUser`.
+ * Como guarda separada, bastaria alguém esquecer de chamá-la numa função nova
+ * para o bloqueio virar enfeite — e o token de quem foi bloqueado continua
+ * válido até expirar, então não dá para confiar só na sessão.
+ *
+ * Custa uma consulta por requisição. Barato perto de uma geração de imagem.
+ */
 export async function requireUser(request: Request): Promise<Caller> {
   const header = request.headers.get("Authorization") ?? "";
   const token = header.toLowerCase().startsWith("bearer ") ? header.slice(7).trim() : "";
@@ -26,6 +35,16 @@ export async function requireUser(request: Request): Promise<Caller> {
   const admin = adminClient();
   const { data, error } = await admin.auth.getUser(token);
   if (error || !data.user) throw errors.unauthorized();
+
+  const { data: perfil, error: perfilError } = await admin
+    .from("profiles")
+    .select("access_status")
+    .eq("id", data.user.id)
+    .maybeSingle();
+  if (perfilError) throw errors.internal();
+  if (perfil?.access_status === "bloqueado") {
+    throw errors.forbidden("Esta conta está bloqueada. Fale com quem administra o CreatvOS.");
+  }
 
   return { userId: data.user.id, email: data.user.email ?? null, token };
 }

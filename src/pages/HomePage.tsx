@@ -170,7 +170,9 @@ export default function HomePage() {
             {routineLabel && (
               <>
                 <Divider vertical className="hidden md:block" />
-                <FooterLink onClick={() => navigate("/app/rotinas")}>{routineLabel}</FooterLink>
+                <FooterLink onClick={() => {}} disabled>
+                  {routineLabel}
+                </FooterLink>
               </>
             )}
 

@@ -591,6 +591,9 @@ async function referenciasDeEstilo(
     .eq("workspace_id", workspaceId)
     .eq("kind", "referencia")
     .is("deleted_at", null)
+    // A ordem é escolha de quem cuida da marca, não do que o banco devolver.
+    .order("position")
+    .order("created_at")
     .limit(3);
 
   const caminhos = (data ?? []).map((item) => item.storage_path).filter(Boolean);

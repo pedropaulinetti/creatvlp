@@ -16,7 +16,7 @@
  * disponibilidade e descrição inteira; JSON-LD depois, porque traz o essencial
  * de qualquer loja. Nunca as duas, para não duplicar o mesmo produto.
  */
-import { looksLikeShopify, importShopifyStore, detectCurrency, stripHtml, toCents, usefulTags } from "./shopify.ts";
+import { looksLikeShopify, importShopifyStore, dominioDaLoja, detectCurrency, stripHtml, toCents, usefulTags } from "./shopify.ts";
 import type { ShopifyProduct } from "./shopify.ts";
 
 /** O produto é o mesmo objeto, qualquer que tenha sido a origem. */
@@ -49,6 +49,23 @@ function comoTexto(valor: unknown): string {
  * A imagem aparece de três jeitos no schema.org: endereço solto, lista de
  * endereços ou `ImageObject`. Vale a primeira que existir.
  */
+/**
+ * Todas as imagens declaradas, na ordem.
+ *
+ * O schema.org aceita as três formas: endereço solto, lista de endereços ou
+ * `ImageObject`. Pegar só a primeira descartava as outras fotos do produto,
+ * que são justamente o que dá ao modelo mais de um ângulo do mesmo objeto.
+ */
+function todasAsImagens(valor: unknown): string[] {
+  if (typeof valor === "string") return valor.trim() ? [valor.trim()] : [];
+  if (Array.isArray(valor)) return valor.flatMap(todasAsImagens);
+  if (valor && typeof valor === "object") {
+    const endereco = comoTexto((valor as No).url);
+    return endereco ? [endereco] : [];
+  }
+  return [];
+}
+
 function primeiraImagem(valor: unknown): string {
   if (typeof valor === "string") return valor.trim();
   if (Array.isArray(valor)) {
@@ -175,6 +192,10 @@ function colherJsonLd(html: string, baseUrl: string, limite: number): Colheita {
         price_cents: oferta.price_cents,
         url: absoluta(comoTexto(no.url), baseUrl) ?? baseUrl,
         image: absoluta(primeiraImagem(no.image), baseUrl),
+        images: todasAsImagens(no.image)
+          .map((endereco) => absoluta(endereco, baseUrl))
+          .filter((endereco): endereco is string => Boolean(endereco))
+          .slice(0, 5),
         highlights: usefulTags(no.keywords),
         available: oferta.available ?? true,
       });
@@ -214,15 +235,29 @@ export async function montarCatalogo(
   const ehShopify = looksLikeShopify(html);
 
   if (ehShopify) {
-    const loja = await importShopifyStore(url, limite, detectCurrency(html)).catch(() => null);
-    if (loja?.products.length) {
-      return {
-        fonte: "shopify",
-        vendor: loja.vendor,
-        currency: loja.currency,
-        products: loja.products,
-        productTypes: loja.productTypes,
-      };
+    /*
+     * O domínio público primeiro, o da loja depois.
+     *
+     * Vitrine headless — SPA em `marca.com.br` lendo `marca.myshopify.com` —
+     * devolve 404 no `/products.json` público e não tem JSON-LD, porque o
+     * HTML chega vazio e o conteúdo é montado no navegador. Sem esta segunda
+     * tentativa a marca entra sem catálogo, e os produtos acabam vindo do
+     * modelo de texto: nome e descrição, sem preço e sem foto.
+     */
+    const moeda = detectCurrency(html);
+    const candidatos = [url, dominioDaLoja(html)].filter(Boolean) as string[];
+
+    for (const candidato of candidatos) {
+      const loja = await importShopifyStore(candidato, limite, moeda).catch(() => null);
+      if (loja?.products.length) {
+        return {
+          fonte: "shopify",
+          vendor: loja.vendor,
+          currency: loja.currency,
+          products: loja.products,
+          productTypes: loja.productTypes,
+        };
+      }
     }
   }
 

@@ -7,8 +7,12 @@ export type ProdutoLido = {
   description: string;
   price_cents: number | null;
   image: string | null;
+  /** As demais fotos do produto, como o site as publica. */
+  images?: string[];
   /** Caminho no nosso Storage, depois de a foto ser baixada do site. */
   image_path?: string | null;
+  /** Todas as fotos guardadas, na ordem. A primeira é a principal. */
+  image_paths?: string[];
   url?: string | null;
   highlights: string[];
 };
@@ -26,7 +30,14 @@ export type ProdutoDoRascunho = {
   currency?: string;
   url?: string | null;
   highlights?: string[];
+  /** A foto principal: é ela que vai para a geração. */
   imagePath?: string | null;
+  /*
+   * Todas as fotos, na ordem. A principal é a primeira — e é assim que o
+   * rascunho carrega a galeria antes de existir linha em `product_images`,
+   * que só é gravada ao concluir.
+   */
+  imagePaths?: string[];
   /** Endereço no site de origem — serve de prévia antes de gravar. */
   imageUrl?: string | null;
 };
@@ -65,6 +76,13 @@ export type Leitura = {
   folhas: number;
   cores: Cor[];
   fontes: { headline: string; body: string };
+  /**
+   * Os arquivos de fonte já guardados no nosso Storage.
+   *
+   * É o que deixa a tela escrever o nome da família na letra dela. O arquivo
+   * no site da marca não serve: servidor de fonte quase nunca manda CORS.
+   */
+  arquivosDeFonte: { familia: string; path: string }[];
   logoPath: string | null;
   /** Endereço do logo no site de origem — dá para mostrar antes de guardar. */
   logoUrl: string;
@@ -94,6 +112,7 @@ export const leituraVazia = (): Leitura => ({
   },
   url: "", titulo: "", folhas: 0, cores: [],
   fontes: { headline: "", body: "" },
+  arquivosDeFonte: [],
   logoPath: null, logoUrl: "", paginas: [], imagens: [], referencias: 0, produtos: [], moeda: "BRL", loja: false,
   textoOk: true, confianca: "media", aoVivo: false, funcaoAtual: true,
 });
@@ -118,6 +137,17 @@ export type Draft = {
   formats: string[];
   cadence: string;
   typography: { headline: string; body: string };
+  /*
+   * Arquivos de fonte enviados aqui. Vão para `brand_assets` ao concluir: o
+   * que chega ao modelo é o nome da família, mas guardar o arquivo é o que
+   * permite conferir depois de onde o nome saiu.
+   */
+  fontFiles: {
+    path: string;
+    familia: string;
+    /** Endereço em memória, só para a tela mostrar a fonte antes de gravar. */
+    url?: string | null;
+  }[];
 };
 
 /** Resposta completa de `analyze-brand` — a mesma nos dois modos, stream ou não. */
@@ -140,6 +170,8 @@ export type RespostaAnalise = {
      */
     images?: string[];
     reference_paths?: string[];
+    /** Os arquivos de fonte do site, já guardados: família e caminho. */
+    font_paths?: { familia: string; path: string }[];
   } | null;
   /**
    * O catálogo lido do site: do `/products.json` do Shopify ou do JSON-LD que

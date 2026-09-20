@@ -20,6 +20,8 @@ export type ExtractedColor = {
 export type DesignSystem = {
   colors: ExtractedColor[];
   fonts: { headline: string; body: string; candidates: string[] };
+  /** Os arquivos que o site serve, para a tela mostrar a letra de verdade. */
+  fontFiles: { familia: string; url: string }[];
   logo: { url: string; kind: "svg" | "icon" | "og" | "img" } | null;
   images: string[];
   stylesheets: number;
@@ -369,6 +371,75 @@ function nomeInterno(family: string): boolean {
   return /^__/.test(family) || /_[0-9a-f]{6}$/i.test(family) || /^var\(/.test(family);
 }
 
+/*
+ * Fonte de ícone não é tipografia de marca: o arquivo só tem glifos, e o nome
+ * dela escrito nela mesma sai como uma fileira de símbolos. Baixar também é
+ * desperdício — costuma ser a maior das fontes do site.
+ */
+const FONTE_DE_ICONE =
+  /(icomoon|font\s*awesome|fontawesome|material\s*icons|materialicons|glyphicon|ionicon|feather|bootstrap-?icons|iconfont|^icons?$)/i;
+
+function ehFonteDeIcone(family: string): boolean {
+  return FONTE_DE_ICONE.test(family.trim());
+}
+
+/**
+ * Os arquivos de fonte que o próprio site serve.
+ *
+ * O leitor tirava só o NOME da família da folha de estilo. Nome sozinho não
+ * mostra a letra: a tela escreve "Commissioner" na fonte do sistema, e quem
+ * está conferindo a marca não vê a tipografia dela em lugar nenhum.
+ *
+ * Quase toda marca com identidade própria serve os arquivos no próprio
+ * domínio, num `@font-face` que declara a família e o endereço lado a lado —
+ * o que torna o nome autoritativo, sem precisar abrir o binário.
+ */
+export function extractFontFiles(css: string, baseUrl: string): { familia: string; url: string }[] {
+  const achados = new Map<string, { url: string; distancia: number }>();
+
+  for (const bloco of css.matchAll(/@font-face\s*\{([^}]*)\}/gi)) {
+    const corpo = bloco[1];
+    const familia = cleanFamily((corpo.match(/font-family\s*:\s*([^;}]+)/i)?.[1] ?? "").split(",")[0]);
+    if (!familia || GENERIC.has(familia.toLowerCase()) || nomeInterno(familia)) continue;
+    if (ehFonteDeIcone(familia)) continue;
+
+    /*
+     * Um `src` lista vários formatos. woff2 primeiro: é o que o navegador
+     * carrega e o mais leve. Fonte em base64 fica de fora — o ganho não paga
+     * o peso de guardar o arquivo inteiro embutido na folha de estilo.
+     */
+    const enderecos = [...corpo.matchAll(/url\(\s*['"]?([^'")]+)['"]?\s*\)/gi)]
+      .map((item) => item[1].trim())
+      .filter((endereco) => endereco && !/^data:/i.test(endereco));
+
+    const escolhido =
+      enderecos.find((endereco) => /\.woff2(\?|$)/i.test(endereco)) ??
+      enderecos.find((endereco) => /\.(woff|otf|ttf)(\?|$)/i.test(endereco));
+    if (!escolhido) continue;
+
+    /*
+     * O peso importa para a prévia. Pegando o primeiro `@font-face` da família
+     * saía Thin e Light — medido no memoe.com.br — e o nome da fonte aparecia
+     * na tela num traço que não é o da marca. Regular ganha, depois medium.
+     */
+    const peso = Number.parseInt(corpo.match(/font-weight\s*:\s*(\d{3})/i)?.[1] ?? "400", 10);
+    const distancia = Math.abs(peso - 400);
+
+    const atual = achados.get(familia);
+    if (atual && atual.distancia <= distancia) continue;
+
+    try {
+      achados.set(familia, { url: new URL(escolhido, baseUrl).toString(), distancia });
+    } catch {
+      // Endereço que não resolve simplesmente não entra.
+    }
+  }
+
+  return [...achados.entries()]
+    .map(([familia, item]) => ({ familia, url: item.url }))
+    .slice(0, 4);
+}
+
 export function extractFonts(css: string, html: string) {
   const counts = new Map<string, number>();
   const vars = cssVariables(css);
@@ -377,6 +448,7 @@ export function extractFonts(css: string, html: string) {
     const declarado = resolveVar(match[1], vars);
     const family = cleanFamily(declarado.split(",")[0]);
     if (!family || nomeInterno(family) || GENERIC.has(family.toLowerCase())) continue;
+    if (ehFonteDeIcone(family)) continue;
     counts.set(family, (counts.get(family) ?? 0) + 1);
   }
 
@@ -741,6 +813,7 @@ export async function extractDesignSystem(
   aoAvancar({ etapa: "paleta", cores: doCss });
 
   const fonts = extractFonts(css, html);
+  const fontFiles = extractFontFiles(css, baseUrl);
   aoAvancar({ etapa: "tipografia", fonts });
 
   const logo = extractLogo(html, baseUrl);
@@ -750,7 +823,7 @@ export async function extractDesignSystem(
   const colors = await comCoresDoLogo(doCss, logo);
   if (colors !== doCss) aoAvancar({ etapa: "paleta", cores: colors });
 
-  return { colors, fonts, logo, images: extractImages(html, baseUrl), stylesheets: count };
+  return { colors, fonts, fontFiles, logo, images: extractImages(html, baseUrl), stylesheets: count };
 }
 
 /**

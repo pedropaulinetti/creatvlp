@@ -2,20 +2,26 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowRight, Check, Eye, EyeOff } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, Mail } from "lucide-react";
 import { AuthLayout } from "@/pages/AuthLayout";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Hint } from "@/components/ui/field";
 import { InlineError } from "@/components/ui/states";
 import { signUpSchema, type SignUpInput } from "@/lib/schemas";
 import { useAuth, authErrorMessage } from "@/features/auth/AuthProvider";
+import { CampoDeCodigo, useEsperaParaReenviar } from "@/features/auth/CampoDeCodigo";
 
 export default function SignUpPage() {
-  const { signUp } = useAuth();
+  const { signUp, confirmSignUp, resendSignUpCode } = useAuth();
   const navigate = useNavigate();
   const [formError, setFormError] = useState("");
   const [confirmationSent, setConfirmationSent] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [codigo, setCodigo] = useState("");
+  const [erroDoCodigo, setErroDoCodigo] = useState("");
+  const [conferindo, setConferindo] = useState(false);
+  const [reenviando, setReenviando] = useState(false);
+  const espera = useEsperaParaReenviar();
 
   const {
     register,
@@ -38,24 +44,100 @@ export default function SignUpPage() {
     }
   });
 
+  /*
+   * O código vem por e-mail e é conferido aqui mesmo, sem sair da tela.
+   *
+   * Antes a confirmação era um link: a pessoa saía do app, abria o e-mail,
+   * clicava e voltava numa aba nova — e quem se cadastrava no celular com o
+   * e-mail em outro aplicativo perdia o contexto no caminho.
+   */
+  async function conferirCodigo(valor: string) {
+    if (valor.length < 6 || conferindo) return;
+    setConferindo(true);
+    setErroDoCodigo("");
+    try {
+      await confirmSignUp(getValues("email"), valor);
+      navigate("/onboarding", { replace: true });
+    } catch (error) {
+      setErroDoCodigo(authErrorMessage(error));
+      setCodigo("");
+    } finally {
+      setConferindo(false);
+    }
+  }
+
+  async function reenviar() {
+    if (espera.restam > 0 || reenviando) return;
+    setReenviando(true);
+    setErroDoCodigo("");
+    try {
+      await resendSignUpCode(getValues("email"));
+      espera.reiniciar();
+      setCodigo("");
+    } catch (error) {
+      setErroDoCodigo(authErrorMessage(error));
+    } finally {
+      setReenviando(false);
+    }
+  }
+
   if (confirmationSent) {
     return (
       <AuthLayout
         eyebrow="Quase lá"
-        title={<>Confirme seu e-mail para começar.</>}
-        lede="Enviamos um link de confirmação. Ele abre direto no onboarding da sua marca."
+        title={<>Digite o código que enviamos.</>}
+        lede="Seis dígitos, válidos por 10 minutos. Depois disso você cai direto na criação da marca."
       >
-        <div className="flex flex-col gap-4">
-          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-positive-soft">
-            <Check className="h-4.5 w-4.5 text-positive" aria-hidden />
-          </span>
-          <h2 className="text-[18px] font-medium text-ink">E-mail enviado</h2>
-          <p className="text-[13.5px] leading-relaxed text-ink-muted">
-            Enviamos a confirmação para <strong className="text-ink">{getValues("email")}</strong>. Abra o link e
-            você entra direto na criação da marca.
-          </p>
-          <Hint>Não chegou? Verifique o spam ou aguarde um minuto antes de tentar de novo.</Hint>
-          <Button asChild variant="outline" className="mt-1 w-full">
+        <div className="flex flex-col gap-5">
+          <div className="flex items-start gap-3">
+            <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-soft">
+              <Mail className="h-4 w-4 text-accent" aria-hidden />
+            </span>
+            <p className="text-[13.5px] leading-relaxed text-ink-muted">
+              Enviamos para <strong className="text-ink">{getValues("email")}</strong>.
+            </p>
+          </div>
+
+          <CampoDeCodigo
+            valor={codigo}
+            aoMudar={(valor) => {
+              setCodigo(valor);
+              if (erroDoCodigo) setErroDoCodigo("");
+            }}
+            aoCompletar={conferirCodigo}
+            desabilitado={conferindo}
+            invalido={Boolean(erroDoCodigo)}
+          />
+
+          <InlineError>{erroDoCodigo}</InlineError>
+
+          <Button
+            onClick={() => void conferirCodigo(codigo)}
+            loading={conferindo}
+            disabled={codigo.length < 6}
+            className="w-full"
+          >
+            Confirmar
+            {!conferindo && <ArrowRight className="h-4 w-4" aria-hidden />}
+          </Button>
+
+          <div className="flex items-center gap-3">
+            <Hint>
+              {espera.restam > 0
+                ? `Não chegou? Você pode reenviar em ${espera.restam}s.`
+                : "Não chegou? Verifique o spam."}
+            </Hint>
+            <button
+              type="button"
+              onClick={() => void reenviar()}
+              disabled={espera.restam > 0 || reenviando}
+              className="ml-auto shrink-0 text-[12.5px] text-accent underline-offset-2 hover:underline disabled:text-ink-faint disabled:no-underline"
+            >
+              {reenviando ? "Reenviando…" : "Reenviar código"}
+            </button>
+          </div>
+
+          <Button asChild variant="quiet" className="w-full">
             <Link to="/login">Voltar para o login</Link>
           </Button>
         </div>

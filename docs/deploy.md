@@ -111,13 +111,47 @@ No painel do Supabase, em Authentication → URL Configuration:
 - **Redirect URLs**: `https://www.creatv.com.br/**`, `https://creatv.com.br/**` e
   `http://localhost:5173/**` para desenvolvimento.
 
-Sem os curingas os links de recuperação de senha e de confirmação de e-mail
-falham silenciosamente.
+Sem os curingas a confirmação de e-mail falha silenciosamente. A recuperação de
+senha não depende mais de redirect: ela é por código.
 
-> **Antes de abrir a beta:** o projeto usa o SMTP embutido do Supabase, limitado a
-> poucos e-mails por hora. Configure um SMTP próprio (Resend, por exemplo) em
-> Authentication → SMTP Settings, ou cadastro e recuperação vão falhar assim que
-> mais de duas pessoas entrarem na mesma hora.
+### E-mail de autenticação: Resend e código de seis dígitos
+
+Cadastro e recuperação de senha usam o mesmo desenho: o e-mail traz um código de
+seis dígitos, conferido dentro do app, sem link mágico. Quem pede a senha pelo
+celular lê o e-mail em outro aplicativo, e com link perdia o contexto no meio do
+caminho.
+
+**Já configurado no projeto** (`hqmhxoismhzcrytkqdpi`), em 20/09/2026:
+
+- SMTP em `smtp.resend.com:465`, usuário `resend`, remetente
+  `nao-responda@mail.creatv.com.br` com o nome `CreatvOS`.
+- Código de 6 dígitos (`mailer_otp_length`), válido por 10 minutos (`mailer_otp_exp`).
+- Templates de cadastro e de recuperação com `{{ .Token }}`, na paleta clara do app.
+
+Para republicar os templates depois de mexer no texto ou no HTML:
+
+```bash
+npm run auth:emails                  # só a recuperação de senha
+npm run auth:emails -- --cadastro    # também o e-mail de cadastro
+```
+
+O script (`scripts/configure-auth-emails.mjs`) precisa apenas do
+`SUPABASE_ACCESS_TOKEN` no `.env.local`. Sem `RESEND_API_KEY` ele não toca no
+SMTP, que já está no ar. É `{{ .Token }}` no lugar de `{{ .ConfirmationURL }}`
+que faz o e-mail virar código em vez de link: trocar isso de volta quebra a tela
+de `/recuperar-senha`, que só sabe receber seis dígitos.
+
+**Se precisar refazer o domínio na Resend.** Em resend.com → Domains, o domínio
+verificado é `mail.creatv.com.br`, com os registros MX, SPF (`v=spf1
+include:amazonses.com ~all`), DKIM (`resend._domainkey`) e DMARC no DNS de
+`creatv.com.br`. Os valores exatos saem do painel da Resend, que varia por
+região. Espere o domínio ficar **Verified** antes de trocar a chave: com ele
+pendente o Supabase aceita o SMTP e os e-mails são recusados no envio, o que dá
+uma falha silenciosa chata de achar.
+
+**Testar.** Peça uma recuperação em `/recuperar-senha` com um e-mail que tenha
+conta. O código chega em segundos e a mesma tela aceita os seis dígitos e segue
+para a criação da nova senha.
 
 ## 7. Frontend
 

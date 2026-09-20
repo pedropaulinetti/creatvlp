@@ -27,6 +27,34 @@ export function buildPath(
   return `${workspaceId}/${brandId}/${resourceType}/${crypto.randomUUID()}.${extension}`;
 }
 
+/**
+ * Extensão pelo tipo servido.
+ *
+ * Fonte entra aqui junto com imagem: a tabela só tinha tipo de imagem, então
+ * todo arquivo de fonte baixado do site da marca morria neste mapa, antes do
+ * upload, devolvendo `null` em silêncio. O nome da família chegava na tela
+ * (vem do CSS, por outro caminho) e o arquivo nunca chegava.
+ */
+export const EXTENSAO_POR_TIPO: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+  "image/svg+xml": "svg",
+  "image/x-icon": "ico",
+  "image/vnd.microsoft.icon": "ico",
+  "font/woff": "woff",
+  "font/woff2": "woff2",
+  "font/ttf": "ttf",
+  "font/otf": "otf",
+  "font/sfnt": "ttf",
+  "application/font-woff": "woff",
+  "application/font-woff2": "woff2",
+  "application/x-font-ttf": "ttf",
+  "application/x-font-truetype": "ttf",
+  "application/x-font-opentype": "otf",
+  "application/vnd.ms-fontobject": "eot",
+};
+
 /** Guarda bytes já baixados (logo importado do site da marca). */
 export async function uploadBytes(
   admin: SupabaseClient,
@@ -37,17 +65,15 @@ export async function uploadBytes(
     resourceType: string;
     bytes: Uint8Array;
     mimeType: string;
+    /**
+     * Extensão vinda do endereço, para quando o servidor não diz o tipo.
+     * Servidor de fonte manda `application/octet-stream` com frequência, e aí
+     * só a URL sabe se é woff2 ou ttf.
+     */
+    extensao?: string;
   },
 ): Promise<string | null> {
-  const extensoes: Record<string, string> = {
-    "image/png": "png",
-    "image/jpeg": "jpg",
-    "image/webp": "webp",
-    "image/svg+xml": "svg",
-    "image/x-icon": "ico",
-    "image/vnd.microsoft.icon": "ico",
-  };
-  const extension = extensoes[params.mimeType];
+  const extension = EXTENSAO_POR_TIPO[params.mimeType] ?? params.extensao;
   if (!extension) return null;
 
   const path = `${params.workspaceId}/${params.brandId}/${params.resourceType}/${crypto.randomUUID()}.${extension}`;

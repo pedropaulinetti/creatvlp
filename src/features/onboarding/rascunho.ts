@@ -10,6 +10,7 @@ export const rascunhoVazio = (): Draft => ({
   products: [], audience: "", audiencePains: [], voiceTone: "",
   recommendedWords: [], forbiddenWords: [], channels: [], formats: ["4:5"], cadence: "Semanal",
   typography: { headline: "", body: "" },
+  fontFiles: [],
 });
 
 /**

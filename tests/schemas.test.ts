@@ -258,16 +258,18 @@ describe("cada formato de copy cobra o seu próprio conteúdo", () => {
     expect(parsed.success && parsed.data.opcoes).toEqual([]);
   });
 
-  it("balão comprido demais não derruba a conversa inteira", () => {
-    const dois = {
+  it("balão comprido demais é aparado, não derruba a conversa", () => {
+    // O teto é de desenho: cortar a ponta custa uma frase, rejeitar custa a campanha.
+    const parsed = copySchema.safeParse({
       ...base,
       formato: "conversa",
       mensagens: [
         { de: "pessoa", texto: "amassa na mala?" },
-        { de: "marca", texto: "n".repeat(180) },
+        { de: "marca", texto: `não amassa. ${"palavra ".repeat(40)}fim` },
       ],
-    };
-    expect(copySchema.safeParse(dois).success).toBe(true);
+    });
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.mensagens[1].texto.length).toBeLessThanOrEqual(140);
   });
 
   it("sem formato declarado, vale título — que é o comportamento antigo", () => {

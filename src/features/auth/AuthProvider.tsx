@@ -10,13 +10,16 @@ type AuthState = {
   session: Session | null;
   user: User | null;
   profile: Profile | null;
-  /** true quando o usuário chegou por link de recuperação de senha */
+  /** true quando o código de recuperação foi conferido e a senha pode ser trocada */
   recovering: boolean;
   configured: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (fullName: string, email: string, password: string) => Promise<{ needsConfirmation: boolean }>;
+  confirmSignUp: (email: string, token: string) => Promise<void>;
+  resendSignUpCode: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<void>;
+  confirmPasswordReset: (email: string, token: string) => Promise<void>;
   updatePassword: (password: string) => Promise<void>;
   refreshProfile: () => Promise<void>;
 };
@@ -43,6 +46,10 @@ export function authErrorMessage(error: unknown): string {
   if (message.includes("failed to fetch") || message.includes("networkerror"))
     return "Sem conexão com o servidor. Verifique sua internet e tente de novo.";
   if (message.includes("same_password")) return "A nova senha precisa ser diferente da anterior.";
+  if (message.includes("otp_expired") || (message.includes("token") && message.includes("expired")))
+    return "Código expirado. Peça um novo.";
+  if (message.includes("invalid token") || message.includes("token is invalid") || message.includes("otp"))
+    return "Código incorreto. Confira os seis dígitos.";
   return "Algo não deu certo. Tente novamente em instantes.";
 }
 
@@ -107,28 +114,73 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       },
       async signUp(fullName, email, password) {
         if (!supabase) throw new Error("Supabase não configurado");
+        /*
+         * Sem `emailRedirectTo`: a confirmação é por código de seis dígitos, e
+         * o template no Supabase manda `{{ .Token }}` em vez do link. Deixar o
+         * redirect aqui não quebra nada, mas sugere um fluxo que não existe
+         * mais.
+         */
         const { data, error } = await supabase.auth.signUp({
           email: email.trim().toLowerCase(),
           password,
-          options: {
-            data: { full_name: fullName.trim() },
-            emailRedirectTo: `${window.location.origin}/app`,
-          },
+          options: { data: { full_name: fullName.trim() } },
         });
         if (error) throw error;
         return { needsConfirmation: !data.session };
+      },
+
+      /** Confirma o cadastro com o código que chegou por e-mail. */
+      async confirmSignUp(email, token) {
+        if (!supabase) throw new Error("Supabase não configurado");
+        const { error } = await supabase.auth.verifyOtp({
+          email: email.trim().toLowerCase(),
+          token: token.trim(),
+          type: "signup",
+        });
+        if (error) throw error;
+      },
+
+      /** Reenvia o código, quando não chegou ou expirou. */
+      async resendSignUpCode(email) {
+        if (!supabase) throw new Error("Supabase não configurado");
+        const { error } = await supabase.auth.resend({
+          type: "signup",
+          email: email.trim().toLowerCase(),
+        });
+        if (error) throw error;
       },
       async signOut() {
         if (!supabase) return;
         await supabase.auth.signOut();
         setProfile(null);
       },
+      /*
+       * Pede o código de recuperação.
+       *
+       * Sem `redirectTo`: o template de "Reset Password" no Supabase manda
+       * `{{ .Token }}`, seis dígitos, em vez do link mágico. É o mesmo desenho
+       * da confirmação de cadastro, e pelo mesmo motivo: quem pede a senha no
+       * celular lê o e-mail em outro aplicativo e perdia o contexto no meio do
+       * caminho. Chamar de novo reenvia o código (`auth.resend` não aceita o
+       * tipo `recovery`).
+       */
       async requestPasswordReset(email) {
         if (!supabase) throw new Error("Supabase não configurado");
-        const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-          redirectTo: `${window.location.origin}/recuperar-senha`,
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase());
+        if (error) throw error;
+      },
+
+      /** Confere o código e abre a sessão curta que permite trocar a senha. */
+      async confirmPasswordReset(email, token) {
+        if (!supabase) throw new Error("Supabase não configurado");
+        const { error } = await supabase.auth.verifyOtp({
+          email: email.trim().toLowerCase(),
+          token: token.trim(),
+          type: "recovery",
         });
         if (error) throw error;
+        // `verifyOtp` emite SIGNED_IN, não PASSWORD_RECOVERY: o estado vem daqui.
+        setRecovering(true);
       },
       async updatePassword(password) {
         if (!supabase) throw new Error("Supabase não configurado");

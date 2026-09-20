@@ -2,7 +2,7 @@ import { z } from "npm:zod@3.23.8";
 import { serveJson, json, errors } from "../_shared/http.ts";
 import { querStream, streamEvents, type Emitir } from "../_shared/stream.ts";
 import { adminClient, requireUser, requireMembership, enforceRateLimit } from "../_shared/auth.ts";
-import { fetchPublicPage, extractPageFacts, fetchImage, decodeDataUrl } from "../_shared/url-guard.ts";
+import { fetchPublicPage, extractPageFacts, fetchImage, fetchFont, decodeDataUrl } from "../_shared/url-guard.ts";
 import { uploadBytes } from "../_shared/storage.ts";
 import { extractDesignSystem, extractImages, extractLogo } from "../_shared/design-system.ts";
 import { escolherPaginas } from "../_shared/crawl.ts";
@@ -189,11 +189,36 @@ async function analisar(contexto: Contexto, emitir: Emitir) {
    * precisa mostrar. Vai para o Storage junto do resto e o caminho volta em
    * cada produto, para o catálogo nascer já com imagem.
    */
-  const comImagem = catalogo?.products.filter((produto) => produto.image) ?? [];
+  const comImagem = catalogo?.products.filter((produto) => produto.image || produto.images?.length) ?? [];
   const imagensDeProduto = await guardarImagensDeProduto(
     admin,
     brandId ? { workspaceId, brandId, produtos: comImagem.slice(0, MAX_IMAGENS_DE_PRODUTO) } : null,
   );
+
+  /*
+   * As fontes que o site serve, guardadas junto da marca.
+   *
+   * Sem o arquivo, a tela escreve "Commissioner" na fonte do sistema e quem
+   * confere a identidade não vê a tipografia dela em lugar nenhum. O nome vem
+   * do próprio `@font-face`, então é autoritativo sem abrir o binário.
+   */
+  const fontesGuardadas = await guardarFontes(
+    admin,
+    brandId ? { workspaceId, brandId, fontes: design?.fontFiles ?? [] } : null,
+  );
+
+  /*
+   * A etapa de tipografia é anunciada duas vezes: primeiro com os nomes, assim
+   * que saem do CSS, e de novo agora com os arquivos já no nosso Storage.
+   *
+   * O segundo anúncio é o que permite à tela escrever o nome da família na
+   * letra dela. O arquivo no site da marca não serve para isso: servidor de
+   * fonte quase nunca manda `Access-Control-Allow-Origin`, e o navegador
+   * recusa. Passando pelo nosso bucket, a URL assinada carrega.
+   */
+  if (fontesGuardadas.length) {
+    passo("tipografia", { fonts: design?.fonts, font_paths: fontesGuardadas });
+  }
 
   const daPagina = design?.images.slice(0, MAX_REFERENCIAS) ?? [];
   let referencePaths: string[] = [];
@@ -219,7 +244,7 @@ async function analisar(contexto: Contexto, emitir: Emitir) {
       cores: design?.colors.length ?? 0,
       produtos: catalogo?.products.length ?? 0,
       referencias: referencePaths.length,
-      imagens_de_produto: imagensDeProduto.size,
+      imagens_de_produto: [...imagensDeProduto.values()].flat().length,
       paginas: 1 + internas.length,
     },
   });
@@ -234,10 +259,15 @@ async function analisar(contexto: Contexto, emitir: Emitir) {
         vendor: catalogo.vendor,
         currency: catalogo.currency,
         source: catalogo.fonte,
-        products: catalogo.products.map((produto) => ({
-          ...produto,
-          image_path: imagensDeProduto.get(produto.name) ?? null,
-        })),
+        products: catalogo.products.map((produto) => {
+          const guardadas = imagensDeProduto.get(produto.name) ?? [];
+          return {
+            ...produto,
+            // A primeira é a principal; as demais viram a galeria do produto.
+            image_path: guardadas[0] ?? null,
+            image_paths: guardadas,
+          };
+        }),
         product_types: catalogo.productTypes,
       }
     : null;
@@ -253,7 +283,9 @@ async function analisar(contexto: Contexto, emitir: Emitir) {
         : data.products,
       name: data.name || catalogo?.vendor || "",
     },
-    design_system: design ? { ...design, logo_path: logoPath, reference_paths: referencePaths } : null,
+    design_system: design
+      ? { ...design, logo_path: logoPath, reference_paths: referencePaths, font_paths: fontesGuardadas }
+      : null,
     catalog: catalogoDaResposta,
     /*
      * `shopify` era o nome de quando só loja Shopify tinha catálogo. Continua
@@ -336,30 +368,54 @@ function completarComInternas(
  * Falha em uma não atrapalha as outras nem o catálogo: produto sem foto entra
  * do mesmo jeito, só sem imagem.
  */
+/** Quantas fotos de cada produto valem o download. Depois disso é acervo morto. */
+const MAX_FOTOS_POR_PRODUTO = 3;
+
 async function guardarImagensDeProduto(
   admin: SupabaseClient,
-  alvo: { workspaceId: string; brandId: string; produtos: { name: string; image: string | null }[] } | null,
-): Promise<Map<string, string>> {
-  const caminhos = new Map<string, string>();
+  alvo:
+    | {
+        workspaceId: string;
+        brandId: string;
+        produtos: { name: string; image: string | null; images?: string[] }[];
+      }
+    | null,
+): Promise<Map<string, string[]>> {
+  const caminhos = new Map<string, string[]>();
   if (!alvo?.produtos.length) return caminhos;
 
   const guardadas = await Promise.all(
     alvo.produtos.map(async (produto) => {
-      try {
-        const imagem = await fetchImage(produto.image!);
-        if (!imagem) return null;
-        const caminho = await uploadBytes(admin, {
-          bucket: "product-assets",
-          workspaceId: alvo.workspaceId,
-          brandId: alvo.brandId,
-          resourceType: "produto",
-          bytes: imagem.bytes,
-          mimeType: imagem.mimeType,
-        });
-        return caminho ? ([produto.name, caminho] as const) : null;
-      } catch {
-        return null;
-      }
+      /*
+       * Todas as fotos do produto, não só a capa. Um produto tem frente, verso
+       * e uso — e a peça fica melhor quando o modelo vê mais de um ângulo do
+       * mesmo objeto. A primeira continua sendo a principal.
+       */
+      const enderecos = [...new Set([produto.image, ...(produto.images ?? [])].filter(Boolean))]
+        .slice(0, MAX_FOTOS_POR_PRODUTO) as string[];
+
+      const doProduto = await Promise.all(
+        enderecos.map(async (endereco) => {
+          try {
+            const imagem = await fetchImage(endereco);
+            if (!imagem) return null;
+            return await uploadBytes(admin, {
+              bucket: "product-assets",
+              workspaceId: alvo.workspaceId,
+              brandId: alvo.brandId,
+              resourceType: "produto",
+              bytes: imagem.bytes,
+              mimeType: imagem.mimeType,
+            });
+          } catch {
+            // Uma foto que falha não derruba as outras do mesmo produto.
+            return null;
+          }
+        }),
+      );
+
+      const validos = doProduto.filter((caminho): caminho is string => Boolean(caminho));
+      return validos.length ? ([produto.name, validos] as const) : null;
     }),
   );
 
@@ -375,6 +431,47 @@ async function guardarImagensDeProduto(
  * Imagem de site é grande e nem sempre acessível; o que der certo entra, o que
  * não der é ignorado em silêncio — nenhuma delas é essencial ao onboarding.
  */
+/**
+ * Baixa e guarda os arquivos de fonte do site.
+ *
+ * Uma falha não derruba as outras, e fonte nenhuma não impede a leitura de
+ * concluir: o nome da família continua valendo para a geração.
+ */
+async function guardarFontes(
+  admin: SupabaseClient,
+  alvo: { workspaceId: string; brandId: string; fontes: { familia: string; url: string }[] } | null,
+): Promise<{ familia: string; path: string }[]> {
+  if (!alvo?.fontes.length) return [];
+
+  const guardadas = await Promise.all(
+    alvo.fontes.map(async (fonte) => {
+      try {
+        const arquivo = await fetchFont(fonte.url);
+        if (!arquivo) return null;
+        /*
+         * Servidor de fonte manda `octet-stream` com frequência. Quando manda,
+         * o tipo não diz se é woff2 ou ttf e só o endereço sabe.
+         */
+        const extensao = fonte.url.match(/\.(woff2|woff|otf|ttf)(?:[?#]|$)/i)?.[1].toLowerCase();
+        const caminho = await uploadBytes(admin, {
+          bucket: "brand-assets",
+          workspaceId: alvo.workspaceId,
+          brandId: alvo.brandId,
+          resourceType: "fonte",
+          bytes: arquivo.bytes,
+          mimeType: arquivo.mimeType,
+          extensao,
+        });
+        return caminho ? { familia: fonte.familia, path: caminho } : null;
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  return guardadas.filter((item): item is { familia: string; path: string } => Boolean(item));
+}
+
 async function guardarReferencias(
   admin: SupabaseClient,
   { workspaceId, brandId, urls }: { workspaceId: string; brandId: string; urls: string[] },

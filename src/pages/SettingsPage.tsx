@@ -11,7 +11,7 @@ import { EmptyState, InlineError, LoadingBlock, Notice } from "@/components/ui/s
 import { useAuth } from "@/features/auth/AuthProvider";
 import { useWorkspace } from "@/features/workspace/WorkspaceProvider";
 import { requireSupabase, supabase } from "@/lib/supabase";
-import { formatUSD, initials } from "@/lib/utils";
+import { initials } from "@/lib/utils";
 import { isNearLimit, limitOf, usedOf } from "@/lib/quotas";
 import { canRenameWorkspace, canInviteMember } from "@/lib/permissions";
 
@@ -46,7 +46,7 @@ export default function SettingsPage() {
     queryFn: async () => {
       const { data } = await supabase!
         .from("ai_usage_events")
-        .select("kind, model, cost_usd, images, created_at")
+        .select("kind, images, created_at")
         .eq("workspace_id", workspaceId!)
         .order("created_at", { ascending: false })
         .limit(200);
@@ -86,7 +86,6 @@ export default function SettingsPage() {
   const campaignsUsed = quota ? usedOf(quota, "campanha") : 0;
   const nearImageLimit = quota && plan ? isNearLimit(quota, plan, "imagem") : false;
   const memberCount = members.data?.length ?? 0;
-  const totalCost = (usage.data ?? []).reduce((total, event) => total + Number(event.cost_usd ?? 0), 0);
 
   return (
     <div className="mx-auto flex w-full max-w-[820px] flex-col gap-6 px-5 py-6 md:px-8 md:py-8">
@@ -223,7 +222,7 @@ export default function SettingsPage() {
 
             <Divider />
 
-            <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
               <div className="flex flex-col gap-1">
                 <dt className="label-mono">Marcas</dt>
                 <dd className="text-[15px] text-ink">até {plan?.brands_limit ?? "—"}</dd>
@@ -235,10 +234,6 @@ export default function SettingsPage() {
               <div className="flex flex-col gap-1">
                 <dt className="label-mono">Rotinas automáticas</dt>
                 <dd className="text-[15px] text-ink">{plan?.auto_routines ? "sim" : "não"}</dd>
-              </div>
-              <div className="flex flex-col gap-1">
-                <dt className="label-mono">Custo de IA</dt>
-                <dd className="text-[15px] text-ink">{formatUSD(totalCost)}</dd>
               </div>
             </dl>
           </Panel>
@@ -260,9 +255,8 @@ export default function SettingsPage() {
                     <span className="font-mono text-[11px] text-ink-faint">
                       {new Date(event.created_at).toLocaleString("pt-BR")}
                     </span>
-                    <span className="text-[13px] text-ink">{event.kind}</span>
-                    <span className="text-[12px] text-ink-muted">{event.model}</span>
-                    <span className="ml-auto font-mono text-[12px] text-ink-2">{formatUSD(Number(event.cost_usd))}</span>
+                    <span className="text-[13px] text-ink">{eventLabel(event.kind)}</span>
+                    <span className="ml-auto font-mono text-[12px] text-ink-2">{eventCost(event.kind, event.images)}</span>
                   </div>
                 ))}
               </div>
@@ -272,6 +266,33 @@ export default function SettingsPage() {
       </Tabs>
     </div>
   );
+}
+
+/*
+ * O nome interno do evento e o modelo que o atendeu são bastidores: dizem
+ * respeito a como a plataforma resolveu o pedido, não ao que o cliente
+ * contratou. Aqui fora existe só a unidade que ele compra — o crédito.
+ */
+const EVENT_LABEL: Record<string, string> = {
+  direcoes: "Campanha",
+  imagem: "Imagem",
+  regeneracao: "Nova imagem",
+  regeneracao_copy: "Novo texto",
+  copies: "Textos",
+  chat: "Conversa",
+  analise_marca: "Leitura da marca",
+  recomendacao: "Recomendação",
+};
+
+function eventLabel(kind: string): string {
+  return EVENT_LABEL[kind] ?? kind;
+}
+
+function eventCost(kind: string, images: number | null): string {
+  const count = Number(images ?? 0);
+  if (count > 0) return `${count} ${count === 1 ? "crédito" : "créditos"}`;
+  if (kind === "direcoes") return "1 campanha";
+  return "sem crédito";
 }
 
 function UsageBar({ label, used, limit, warn }: { label: string; used: number; limit: number; warn?: boolean }) {

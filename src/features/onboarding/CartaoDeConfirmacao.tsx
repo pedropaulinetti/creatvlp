@@ -1,10 +1,14 @@
 import * as React from "react";
 import { Check, ImagePlus, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ListaDeFontes } from "@/features/brand/ListaDeFontes";
+import { CamposDoProduto, GaleriaDoProduto } from "@/features/brand/CamposDoProduto";
 import { Field, Hint, Input, MonoLabel, Textarea } from "@/components/ui/field";
 import { InlineError, Notice } from "@/components/ui/states";
 import { FotoDoProduto } from "@/components/FotoDoProduto";
 import { prettyUrl } from "@/lib/url";
+import { cn } from "@/lib/utils";
+import { useSignedUrls } from "@/features/creatives/useAssetUrls";
 import { formatarPreco } from "./SequenciaDeLeitura";
 import type { Draft, Leitura } from "./tipos";
 
@@ -22,6 +26,9 @@ export function CartaoDeConfirmacao({
   aoConfirmar,
   aoEnviarLogo,
   aoEnviarFotoDeProduto,
+  aoRemoverFotoDeProduto,
+  aoTornarFotoPrincipal,
+  aoEnviarFonte,
   aoRecomecar,
   salvando,
   erro,
@@ -32,6 +39,9 @@ export function CartaoDeConfirmacao({
   aoConfirmar: () => void;
   aoEnviarLogo: (arquivo: File) => Promise<void>;
   aoEnviarFotoDeProduto: (indice: number, arquivo: File) => Promise<void>;
+  aoRemoverFotoDeProduto: (indice: number, caminho: string) => void;
+  aoTornarFotoPrincipal: (indice: number, caminho: string) => void;
+  aoEnviarFonte: (arquivo: File, familia: string) => Promise<void>;
   aoRecomecar: () => void;
   salvando: boolean;
   erro: string;
@@ -73,7 +83,13 @@ export function CartaoDeConfirmacao({
         className="surgir flex flex-col gap-5 rounded-[14px] border border-line-strong bg-card p-5"
         style={{ animationDelay: "70ms" }}
       >
-        <Identidade draft={draft} leitura={leitura} aplicar={aplicar} aoEnviarLogo={aoEnviarLogo} />
+        <Identidade
+          draft={draft}
+          leitura={leitura}
+          aplicar={aplicar}
+          aoEnviarLogo={aoEnviarLogo}
+          aoEnviarFonte={aoEnviarFonte}
+        />
 
         <div className="h-px bg-line-soft" />
 
@@ -114,7 +130,14 @@ export function CartaoDeConfirmacao({
           </Field>
         </div>
 
-        <Produtos draft={draft} leitura={leitura} aplicar={aplicar} aoEnviarFoto={aoEnviarFotoDeProduto} />
+        <Produtos
+          draft={draft}
+          leitura={leitura}
+          aplicar={aplicar}
+          aoEnviarFoto={aoEnviarFotoDeProduto}
+          aoRemoverFoto={aoRemoverFotoDeProduto}
+          aoTornarPrincipal={aoTornarFotoPrincipal}
+        />
 
         <Field label="Quem compra de você" htmlFor="rev-audience" optional>
           <Textarea
@@ -155,12 +178,19 @@ function Identidade({
   leitura,
   aplicar,
   aoEnviarLogo,
+  aoEnviarFonte,
 }: {
   draft: Draft;
   leitura: Leitura;
   aplicar: (valores: Partial<Draft>) => void;
   aoEnviarLogo: (arquivo: File) => Promise<void>;
+  aoEnviarFonte: (arquivo: File, familia: string) => Promise<void>;
 }) {
+  const urlsDasFontes = useSignedUrls(
+    "brand-assets",
+    draft.fontFiles.filter((fonte) => !fonte.url).map((fonte) => fonte.path),
+  );
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
@@ -169,80 +199,247 @@ function Identidade({
           {leitura.folhas > 0 && ` de ${leitura.folhas} ${leitura.folhas === 1 ? "folha" : "folhas"} de estilo`}
         </MonoLabel>
 
-        {draft.colors.length ? (
-          <div className="flex flex-wrap gap-1.5">
-            {draft.colors.map((cor, index) => (
-              <button
-                key={cor.hex + cor.role}
-                type="button"
-                aria-label={`Remover ${cor.hex} (${cor.role})`}
-                onClick={() => aplicar({ colors: draft.colors.filter((_, i) => i !== index) })}
-                className="cair group relative flex items-center gap-1.5 rounded-full border border-line bg-surface py-1 pl-1.5 pr-2.5 transition-colors hover:border-danger"
-                style={{ animationDelay: `${Math.min(index, 9) * 45}ms` }}
-              >
-                <span
-                  aria-hidden
-                  className="h-4 w-4 rounded-full border border-line"
-                  style={{ background: cor.hex }}
-                />
-                <span className="font-mono text-[11px] uppercase text-ink-2">{cor.hex}</span>
-                <span className="text-[10.5px] text-ink-faint group-hover:hidden">{cor.role}</span>
-                <X aria-hidden className="hidden h-3 w-3 text-danger group-hover:block" />
-              </button>
-            ))}
-          </div>
-        ) : (
-          <Hint>Nenhuma cor foi encontrada. Você define a paleta em Minha Marca.</Hint>
+        <div className="flex flex-wrap gap-1.5">
+          {draft.colors.map((cor, index) => (
+            <Cor
+              key={`${cor.hex}-${index}`}
+              cor={cor}
+              atraso={Math.min(index, 9) * 45}
+              aoMudar={(valores) =>
+                aplicar({
+                  colors: draft.colors.map((item, i) => (i === index ? { ...item, ...valores } : item)),
+                })
+              }
+              aoRemover={() => aplicar({ colors: draft.colors.filter((_, i) => i !== index) })}
+            />
+          ))}
+
+          {/*
+            Acrescentar faltava: a leitura pega o que está na folha de estilo, e
+            a cor que a marca usa só no impresso, ou que ainda vai usar, não
+            estava em lugar nenhum.
+          */}
+          <label className="flex cursor-pointer items-center gap-1.5 rounded-full border border-dashed border-line-contrast px-3 py-1 text-[12px] text-ink-muted transition-colors hover:border-accent hover:text-ink">
+            <Plus className="h-3 w-3" aria-hidden />
+            Cor
+            <input
+              type="color"
+              className="sr-only"
+              onChange={(evento) =>
+                aplicar({
+                  colors: [...draft.colors, { hex: evento.target.value.toUpperCase(), role: "apoio", label: "" }],
+                })
+              }
+            />
+          </label>
+        </div>
+
+        {!draft.colors.length && (
+          <Hint>Nenhuma cor foi encontrada no site. Acrescente ao menos a principal.</Hint>
         )}
       </div>
 
-      {leitura.imagens.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <MonoLabel>
-            Referências visuais · {draft.referencePaths.length || leitura.imagens.length}
-          </MonoLabel>
-          <div className="flex flex-wrap gap-2">
-            {leitura.imagens.slice(0, 4).map((url, index) => (
+      <Referencias draft={draft} leitura={leitura} aplicar={aplicar} />
+
+      <ListaDeFontes
+        /*
+         * No rascunho o arquivo já está no Storage, mas ainda não há linha em
+         * `brand_assets` — o caminho serve de identificador até concluir.
+         *
+         * A fonte enviada agora tem prévia em memória; a que veio da leitura do
+         * site precisa de URL assinada, e é ela que faz o nome da família
+         * aparecer escrito na própria letra.
+         */
+        fontes={draft.fontFiles.map((fonte) => ({
+          id: fonte.path,
+          familia: fonte.familia,
+          url: fonte.url ?? urlsDasFontes.data?.get(fonte.path) ?? null,
+        }))}
+        tipografia={draft.typography}
+        aoMudarPapel={(papel, familia) =>
+          aplicar({ typography: { ...draft.typography, [papel]: familia } })
+        }
+        aoEnviar={aoEnviarFonte}
+        aoRemover={(id) =>
+          aplicar({ fontFiles: draft.fontFiles.filter((fonte) => fonte.path !== id) })
+        }
+      />
+
+      <div className="flex flex-col gap-2">
+        <MonoLabel>Logo</MonoLabel>
+        <div className="flex flex-wrap items-center gap-3">
+          {(draft.logoPath || leitura.logoUrl) && (
+            <Logo url={leitura.logoUrl} guardada={Boolean(draft.logoPath)} />
+          )}
+          {/*
+            O envio aparece sempre, e não só quando a leitura falha: quando ela
+            acerta o arquivo errado — um ícone, um selo de pagamento — trocar
+            aqui evita carregar a logo errada até Minha Marca.
+          */}
+          <EnvioDeLogo aoEnviar={aoEnviarLogo} temLogo={Boolean(draft.logoPath || leitura.logoUrl)} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * As imagens do site que ficam guardadas com a marca.
+ *
+ * Eram guardadas em bloco e mostradas só as quatro primeiras — sem como
+ * descartar a que não serve. Elas entram na geração como referência de luz e
+ * clima, então uma foto de banner promocional ou de rodapé puxa a peça inteira
+ * para o lugar errado.
+ */
+function Referencias({
+  draft,
+  leitura,
+  aplicar,
+}: {
+  draft: Draft;
+  leitura: Leitura;
+  aplicar: (valores: Partial<Draft>) => void;
+}) {
+  /*
+   * A prévia e o caminho guardado vêm em listas separadas, na mesma ordem.
+   * O par é montado uma vez para que remover uma não desalinhe o resto.
+   */
+  const todas = React.useMemo(
+    () =>
+      (leitura.imagens.length ? leitura.imagens : draft.referencePaths).map((url, indice) => ({
+        url,
+        path: draft.referencePaths[indice] ?? "",
+      })),
+    // Só na primeira montagem: depois disso quem manda é a seleção.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [leitura.imagens.length],
+  );
+
+  if (!todas.length) return null;
+
+  const escolhida = (path: string) => !path || draft.referencePaths.includes(path);
+
+  return (
+    <div className="flex flex-col gap-2">
+      <MonoLabel>Referências visuais · {draft.referencePaths.length}</MonoLabel>
+
+      <div className="flex flex-wrap gap-2">
+        {todas.slice(0, 8).map((item, indice) => {
+          const dentro = escolhida(item.path);
+          return (
+            <button
+              key={item.url + indice}
+              type="button"
+              aria-pressed={dentro}
+              aria-label={dentro ? `Descartar referência ${indice + 1}` : `Usar referência ${indice + 1}`}
+              onClick={() =>
+                aplicar({
+                  referencePaths: dentro
+                    ? draft.referencePaths.filter((caminho) => caminho !== item.path)
+                    : [...draft.referencePaths, item.path],
+                })
+              }
+              className={cn(
+                "surgir relative h-16 w-16 overflow-hidden rounded-[8px] border transition-all",
+                dentro ? "border-accent" : "border-line opacity-40 grayscale",
+              )}
+              style={{ animationDelay: `${indice * 60}ms` }}
+            >
               <img
-                key={url}
-                src={url}
+                src={item.url}
                 alt=""
                 loading="lazy"
-                className="surgir h-16 w-16 rounded-[8px] border border-line object-cover"
-                style={{ animationDelay: `${index * 60}ms` }}
+                className="h-full w-full object-cover"
                 onError={(evento) => {
                   evento.currentTarget.style.display = "none";
                 }}
               />
-            ))}
-          </div>
-          <Hint>Guardadas com a marca. Servem de partida visual para as primeiras peças.</Hint>
-        </div>
-      )}
-
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-        {(draft.typography.headline || draft.typography.body) && (
-          <div className="flex flex-col gap-0.5">
-            <MonoLabel>Tipografia</MonoLabel>
-            <span className="text-[15px] text-ink" style={{ fontFamily: `"${draft.typography.headline}", var(--font-sans)` }}>
-              {draft.typography.headline || draft.typography.body}
-              {draft.typography.body && draft.typography.body !== draft.typography.headline && (
-                <span className="text-ink-muted"> · {draft.typography.body}</span>
+              {dentro && (
+                <span
+                  aria-hidden
+                  className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-accent text-surface"
+                >
+                  <Check className="h-2.5 w-2.5" />
+                </span>
               )}
-            </span>
-          </div>
-        )}
-
-        {draft.logoPath || leitura.logoUrl ? (
-          <div className="flex flex-col gap-1">
-            <MonoLabel>Logo</MonoLabel>
-            <Logo url={leitura.logoUrl} guardada={Boolean(draft.logoPath)} />
-          </div>
-        ) : (
-          <EnvioDeLogo aoEnviar={aoEnviarLogo} />
-        )}
+            </button>
+          );
+        })}
       </div>
+
+      <Hint>
+        Entram na geração como referência de luz e clima. Clique para descartar a que não representa
+        a marca.
+      </Hint>
     </div>
+  );
+}
+
+/** Os papéis que a composição entende. Papel errado vira peça com cor trocada. */
+const PAPEIS = ["primaria", "secundaria", "apoio", "fundo", "texto"];
+
+/**
+ * Uma cor da paleta.
+ *
+ * Antes só dava para remover. O hex vinha da folha de estilo e podia estar
+ * quase certo — e o papel, que é o que decide se a cor vira fundo ou texto na
+ * peça, era adivinhado pela leitura sem ninguém poder corrigir.
+ */
+function Cor({
+  cor,
+  atraso,
+  aoMudar,
+  aoRemover,
+}: {
+  cor: { hex: string; role: string; label: string };
+  atraso: number;
+  aoMudar: (valores: Partial<{ hex: string; role: string }>) => void;
+  aoRemover: () => void;
+}) {
+  return (
+    <span
+      className="cair flex items-center gap-1.5 rounded-full border border-line bg-surface py-1 pl-1.5 pr-1.5"
+      style={{ animationDelay: `${atraso}ms` }}
+    >
+      <label className="cursor-pointer" title="Trocar a cor">
+        <span
+          aria-hidden
+          className="block h-4 w-4 rounded-full border border-line"
+          style={{ background: cor.hex }}
+        />
+        <input
+          type="color"
+          value={cor.hex}
+          aria-label={`Cor ${cor.hex}`}
+          className="sr-only"
+          onChange={(evento) => aoMudar({ hex: evento.target.value.toUpperCase() })}
+        />
+      </label>
+
+      <span className="font-mono text-[11px] uppercase text-ink-2">{cor.hex}</span>
+
+      <select
+        value={PAPEIS.includes(cor.role) ? cor.role : "apoio"}
+        aria-label={`Papel de ${cor.hex}`}
+        onChange={(evento) => aoMudar({ role: evento.target.value })}
+        className="cursor-pointer rounded-full bg-transparent py-0.5 text-[10.5px] text-ink-faint focus:outline-none"
+      >
+        {PAPEIS.map((papel) => (
+          <option key={papel} value={papel}>
+            {papel}
+          </option>
+        ))}
+      </select>
+
+      <button
+        type="button"
+        aria-label={`Remover ${cor.hex}`}
+        onClick={aoRemover}
+        className="flex h-4 w-4 items-center justify-center rounded-full text-ink-faint transition-colors hover:bg-danger-soft hover:text-danger"
+      >
+        <X className="h-3 w-3" aria-hidden />
+      </button>
+    </span>
   );
 }
 
@@ -276,13 +473,19 @@ function Logo({ url, guardada }: { url: string; guardada: boolean }) {
  * Este é o único envio de arquivo que sobrou no onboarding: o resto se faz
  * depois, com calma, em Minha Marca.
  */
-function EnvioDeLogo({ aoEnviar }: { aoEnviar: (arquivo: File) => Promise<void> }) {
+function EnvioDeLogo({
+  aoEnviar,
+  temLogo = false,
+}: {
+  aoEnviar: (arquivo: File) => Promise<void>;
+  temLogo?: boolean;
+}) {
   const [enviando, setEnviando] = React.useState(false);
 
   return (
     <label className="flex cursor-pointer items-center gap-1.5 text-[13px] text-ink-muted transition-colors hover:text-ink">
       <ImagePlus className="h-3.5 w-3.5" aria-hidden />
-      {enviando ? "Enviando logo…" : "Enviar logo"}
+      {enviando ? "Enviando logo…" : temLogo ? "Trocar logo" : "Enviar logo"}
       <input
         type="file"
         accept="image/png,image/jpeg,image/webp,image/svg+xml"
@@ -306,68 +509,140 @@ function Produtos({
   leitura,
   aplicar,
   aoEnviarFoto,
+  aoRemoverFoto,
+  aoTornarPrincipal,
 }: {
   draft: Draft;
   leitura: Leitura;
   aplicar: (valores: Partial<Draft>) => void;
   aoEnviarFoto: (indice: number, arquivo: File) => Promise<void>;
+  aoRemoverFoto: (indice: number, caminho: string) => void;
+  aoTornarPrincipal: (indice: number, caminho: string) => void;
 }) {
+  /*
+   * Um produto aberto por vez. Dez produtos com preço, link, destaques e
+   * galeria abertos ao mesmo tempo viram uma tela de rolagem infinita na qual
+   * ninguém acha o que veio conferir.
+   */
+  const [aberto, setAberto] = React.useState<number | null>(null);
+
   return (
     <Field
       label={`Produtos${draft.products.length ? ` · ${draft.products.length}` : ""}`}
       hint={
-        // A foto é o que a peça mostra: sem dizer que dá para enviar, ninguém
-        // descobre o quadrado vazio do lado do nome.
         leitura.loja
-          ? "Importados da sua loja. Clique no quadrado para pôr ou trocar a foto."
-          : "Adicione ao menos um produto ou serviço. O quadrado ao lado leva a foto."
+          ? "Importados da sua loja. Abra um produto para corrigir preço, fotos e destaques."
+          : "Adicione ao menos um produto ou serviço, e abra para pôr foto e preço."
       }
     >
       <div className="flex flex-col gap-1.5">
-        {draft.products.map((produto, index) => (
-          <div
-            key={index}
-            className="surgir flex items-center gap-2"
-            style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }}
-          >
-            <FotoDoProduto
-              nome={produto.name}
-              imagePath={produto.imagePath}
-              imageUrl={produto.imageUrl}
-              aoEnviar={(arquivo) => aoEnviarFoto(index, arquivo)}
-            />
-            <Input
-              value={produto.name}
-              aria-label={`Produto ${index + 1}`}
-              onChange={(evento) => {
-                const proximos = [...draft.products];
-                proximos[index] = { ...produto, name: evento.target.value };
-                aplicar({ products: proximos });
-              }}
-            />
-            {typeof produto.priceCents === "number" && (
-              <span className="shrink-0 font-mono text-[11.5px] text-ink-muted">
-                {formatarPreco(produto.priceCents, produto.currency || leitura.moeda)}
-              </span>
-            )}
-            <Button
-              type="button"
-              variant="quiet"
-              size="iconLg"
-              aria-label={`Remover ${produto.name || `produto ${index + 1}`}`}
-              onClick={() => aplicar({ products: draft.products.filter((_, i) => i !== index) })}
+        {draft.products.map((produto, index) => {
+          const caminhos = produto.imagePaths ?? (produto.imagePath ? [produto.imagePath] : []);
+          const estaAberto = aberto === index;
+
+          return (
+            <div
+              key={index}
+              className={cn(
+                "surgir flex flex-col gap-3 rounded-[10px] border transition-colors",
+                estaAberto ? "border-line-strong bg-card p-3" : "border-transparent",
+              )}
+              style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }}
             >
-              <Trash2 className="h-3.5 w-3.5" aria-hidden />
-            </Button>
-          </div>
-        ))}
+              <div className="flex items-center gap-2">
+                <FotoDoProduto
+                  nome={produto.name}
+                  imagePath={produto.imagePath ?? caminhos[0]}
+                  imageUrl={produto.imageUrl}
+                  aoEnviar={(arquivo) => aoEnviarFoto(index, arquivo)}
+                />
+                <Input
+                  value={produto.name}
+                  aria-label={`Produto ${index + 1}`}
+                  onChange={(evento) => {
+                    const proximos = [...draft.products];
+                    proximos[index] = { ...produto, name: evento.target.value };
+                    aplicar({ products: proximos });
+                  }}
+                />
+
+                {typeof produto.priceCents === "number" && !estaAberto && (
+                  <span className="shrink-0 font-mono text-[11.5px] text-ink-muted">
+                    {formatarPreco(produto.priceCents, produto.currency || leitura.moeda)}
+                  </span>
+                )}
+
+                <Button
+                  type="button"
+                  variant="quiet"
+                  size="sm"
+                  aria-expanded={estaAberto}
+                  onClick={() => setAberto(estaAberto ? null : index)}
+                >
+                  {estaAberto ? "Fechar" : "Editar"}
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="quiet"
+                  size="iconLg"
+                  aria-label={`Remover ${produto.name || `produto ${index + 1}`}`}
+                  onClick={() => {
+                    aplicar({ products: draft.products.filter((_, i) => i !== index) });
+                    setAberto(null);
+                  }}
+                >
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                </Button>
+              </div>
+
+              {estaAberto && (
+                <>
+                  <GaleriaDoProduto
+                    nome={produto.name}
+                    caminhos={caminhos}
+                    aoEnviar={(arquivo) => aoEnviarFoto(index, arquivo)}
+                    aoRemover={(caminho) => aoRemoverFoto(index, caminho)}
+                    aoTornarPrincipal={(caminho) => aoTornarPrincipal(index, caminho)}
+                  />
+
+                  <CamposDoProduto
+                    valores={{
+                      name: produto.name,
+                      description: produto.description,
+                      priceCents: produto.priceCents ?? null,
+                      currency: produto.currency || leitura.moeda,
+                      url: produto.url ?? "",
+                      highlights: produto.highlights ?? [],
+                    }}
+                    aoMudar={(valores) => {
+                      const proximos = [...draft.products];
+                      proximos[index] = {
+                        ...produto,
+                        ...(valores.description !== undefined && { description: valores.description }),
+                        ...(valores.priceCents !== undefined && { priceCents: valores.priceCents }),
+                        ...(valores.currency !== undefined && { currency: valores.currency }),
+                        ...(valores.url !== undefined && { url: valores.url }),
+                        ...(valores.highlights !== undefined && { highlights: valores.highlights }),
+                      };
+                      aplicar({ products: proximos });
+                    }}
+                  />
+                </>
+              )}
+            </div>
+          );
+        })}
 
         <Button
           type="button"
           variant="outline"
           size="sm"
           className="self-start"
-          onClick={() => aplicar({ products: [...draft.products, { name: "", description: "" }] })}
+          onClick={() => {
+            aplicar({ products: [...draft.products, { name: "", description: "" }] });
+            setAberto(draft.products.length);
+          }}
         >
           <Plus className="h-3.5 w-3.5" aria-hidden />
           Adicionar produto

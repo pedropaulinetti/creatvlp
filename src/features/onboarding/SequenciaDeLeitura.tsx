@@ -3,6 +3,8 @@ import { Check, ShoppingBag } from "lucide-react";
 import { Hint } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
 import { prettyUrl } from "@/lib/url";
+import { useSignedUrls } from "@/features/creatives/useAssetUrls";
+import { useFonteRemota } from "@/features/brand/useFonteRemota";
 import { ETAPAS, type EstadoEtapa, type Leitura } from "./tipos";
 
 /**
@@ -126,7 +128,7 @@ function Achado({ etapa, leitura }: { etapa: (typeof ETAPAS)[number]["chave"]; l
       return leitura.cores.length ? <Paleta cores={leitura.cores} /> : <Legenda>nenhuma cor declarada</Legenda>;
 
     case "tipografia":
-      return <Tipografia fontes={leitura.fontes} />;
+      return <Tipografia fontes={leitura.fontes} arquivos={leitura.arquivosDeFonte} />;
 
     case "logo":
       return <LogoAchado url={leitura.logoUrl} guardado={Boolean(leitura.logoPath)} />;
@@ -182,35 +184,117 @@ function Paleta({ cores }: { cores: Leitura["cores"] }) {
 }
 
 /**
- * A amostra passa a usar a tipografia do site.
+ * A tipografia da marca, escrita na letra dela.
  *
- * A fonte é carregada do Google Fonts só para esta prévia. Se a família não
- * existir por lá, o link não resolve e a amostra fica na fonte do app — que é
- * exatamente o comportamento desejado, sem nenhum tratamento extra.
+ * Nome de família em fonte de sistema não informa nada: "Rubik" escrito em
+ * Inter diz tão pouco quanto o campo vazio, e a tipografia é uma das coisas
+ * que mais mudam a cara da peça gerada. Quem confere a leitura precisa
+ * reconhecer a letra da marca ali, na hora.
+ *
+ * A amostra tem três origens, nesta ordem:
+ *
+ *  1. O arquivo que a leitura baixou do site, servido pelo nosso Storage. É o
+ *     único caminho que funciona para fonte própria, como Kefir ou Haas, que
+ *     não existem no Google Fonts. Direto do site da marca não dá: o servidor
+ *     dela quase nunca manda CORS e o navegador recusa a fonte.
+ *  2. O Google Fonts, para as famílias que existem por lá.
+ *  3. A fonte do app, quando nenhuma das duas resolve.
  */
-function Tipografia({ fontes }: { fontes: Leitura["fontes"] }) {
+function Tipografia({
+  fontes,
+  arquivos,
+}: {
+  fontes: Leitura["fontes"];
+  arquivos: Leitura["arquivosDeFonte"];
+}) {
+  const urls = useSignedUrls("brand-assets", arquivos.map((item) => item.path));
+  const proprias = useFontesDaMarca(arquivos, urls.data);
+
   useFonteRemota(fontes.headline);
   useFonteRemota(fontes.body);
 
   if (!fontes.headline && !fontes.body) return <Legenda>nenhuma família declarada</Legenda>;
 
+  const pilha = (familia: string) => {
+    const propria = proprias.get(familia.toLowerCase());
+    return propria ? `"${propria}", "${familia}", var(--font-sans)` : `"${familia}", var(--font-sans)`;
+  };
+
+  const papeis = [
+    { rotulo: "títulos", familia: fontes.headline },
+    { rotulo: "texto", familia: fontes.body },
+  ].filter(
+    (papel, indice, lista) =>
+      papel.familia && lista.findIndex((outro) => outro.familia === papel.familia) === indice,
+  );
+
   return (
-    <div className="surgir flex flex-wrap items-baseline gap-x-3 gap-y-1">
-      {fontes.headline && (
-        <span
-          className="text-[22px] leading-none text-ink"
-          style={{ fontFamily: `"${fontes.headline}", var(--font-sans)` }}
-        >
-          {fontes.headline}
-        </span>
-      )}
-      {fontes.body && fontes.body !== fontes.headline && (
-        <span className="text-[13px] text-ink-muted" style={{ fontFamily: `"${fontes.body}", var(--font-sans)` }}>
-          texto em {fontes.body}
-        </span>
-      )}
+    <div className="surgir flex flex-col gap-3">
+      {papeis.map((papel) => (
+        <div key={papel.rotulo} className="flex flex-col gap-0.5">
+          <div className="flex items-baseline gap-2">
+            <span className="text-[26px] leading-tight text-ink" style={{ fontFamily: pilha(papel.familia) }}>
+              {papel.familia}
+            </span>
+            <span className="label-mono">{papel.rotulo}</span>
+          </div>
+          {/*
+            O nome sozinho não mostra a letra: escrito na própria fonte, ele
+            revela pouca coisa de uma família com nome curto. O alfabeto revela.
+          */}
+          <span className="text-[15px] leading-snug text-ink-2" style={{ fontFamily: pilha(papel.familia) }}>
+            ABCDEFG abcdefg 0123456789
+          </span>
+        </div>
+      ))}
     </div>
   );
+}
+
+/**
+ * Registra no navegador os arquivos de fonte que a leitura guardou.
+ *
+ * Cada um entra com nome próprio, derivado do caminho, e não com o nome da
+ * família: usar o nome real brigaria com a fonte homônima instalada na
+ * máquina, e a amostra mostraria a do sistema achando que era a da marca.
+ *
+ * Devolve família em minúsculas para o nome registrado, só das que abriram.
+ */
+function useFontesDaMarca(
+  arquivos: Leitura["arquivosDeFonte"],
+  urls: Map<string, string> | undefined,
+) {
+  const [carregadas, setCarregadas] = React.useState<Map<string, string>>(new Map());
+  const pedidas = React.useRef(new Set<string>());
+
+  React.useEffect(() => {
+    if (!urls?.size) return;
+    let vivo = true;
+
+    for (const arquivo of arquivos) {
+      const url = urls.get(arquivo.path);
+      if (!url || pedidas.current.has(arquivo.path)) continue;
+      pedidas.current.add(arquivo.path);
+
+      const registrada = `leitura-${arquivo.path.replace(/[^a-z0-9]/gi, "").slice(-16)}`;
+      new FontFace(registrada, `url(${url})`)
+        .load()
+        .then((pronta) => {
+          if (!vivo) return;
+          document.fonts.add(pronta);
+          setCarregadas((atual) => new Map(atual).set(arquivo.familia.toLowerCase(), registrada));
+        })
+        .catch(() => {
+          // Formato que o navegador não abre cai para o Google Fonts.
+        });
+    }
+
+    return () => {
+      vivo = false;
+    };
+  }, [arquivos, urls]);
+
+  return carregadas;
 }
 
 /**
@@ -312,20 +396,4 @@ export function formatarPreco(centavos: number, moeda: string): string {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: moeda || "BRL" }).format(
     centavos / 100,
   );
-}
-
-/** Carrega uma família do Google Fonts, uma única vez por nome. */
-function useFonteRemota(familia: string) {
-  React.useEffect(() => {
-    const nome = familia.trim();
-    if (!nome || /^(inter|dm mono)$/i.test(nome)) return;
-
-    const href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(nome).replace(/%20/g, "+")}&display=swap`;
-    if (document.head.querySelector(`link[href="${CSS.escape(href)}"]`)) return;
-
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = href;
-    document.head.append(link);
-  }, [familia]);
 }

@@ -183,6 +183,19 @@ export type ChatTurn = z.infer<typeof chatTurnSchema>;
  * essas formas de existirem — o modelo devolvia headline vazia, como pedido, e
  * o schema derrubava a campanha inteira.
  */
+/** Apara em vez de rejeitar — espelha o schema das Edge Functions. */
+const ateLimite = (limite: number, minimo = 0) =>
+  z
+    .string()
+    .trim()
+    .min(minimo)
+    .transform((texto) => {
+      if (texto.length <= limite) return texto;
+      const cortado = texto.slice(0, limite);
+      const espaco = cortado.lastIndexOf(" ");
+      return (espaco > limite * 0.6 ? cortado.slice(0, espaco) : cortado).trimEnd();
+    });
+
 /**
  * `null` conta como campo ausente — espelha o schema das Edge Functions.
  * `.default()` do zod só age sobre `undefined`, e o modelo devolve `null` para
@@ -194,22 +207,22 @@ const semNulo = <T extends z.ZodTypeAny>(schema: T) =>
 export const copySchema = z
   .object({
     formato: semNulo(z.enum(["titulo", "enquete", "conversa"]).default("titulo")),
-    headline: semNulo(z.string().trim().max(120).default("")),
-    subheadline: semNulo(z.string().trim().default("")),
-    body: semNulo(z.string().trim().default("")),
+    headline: semNulo(ateLimite(120).default("")),
+    subheadline: semNulo(ateLimite(160).default("")),
+    body: semNulo(ateLimite(600).default("")),
     cta: z.string().trim().min(1),
-    bullets: semNulo(z.array(z.string().trim().min(1).max(70)).max(5).default([])),
-    pergunta: semNulo(z.string().trim().max(120).default("")),
+    bullets: semNulo(z.array(ateLimite(70, 1)).max(5).default([])),
+    pergunta: semNulo(ateLimite(120).default("")),
     opcoes: semNulo(
       z
-        .array(z.object({ texto: z.string().trim().min(1).max(40), votos: semNulo(z.number().int().min(0).max(999).default(0)) }))
+        .array(z.object({ texto: ateLimite(40, 1), votos: semNulo(z.number().int().min(0).max(999).default(0)) }))
         .max(3)
         .default([]),
     ),
-    // 140 é o que o prompt pede; o teto aqui é rede de segurança, não régua.
+    // 140 é o que cabe no balão; o que passar disso é aparado, não rejeitado.
     mensagens: semNulo(
       z
-        .array(z.object({ de: z.enum(["pessoa", "marca"]), texto: z.string().trim().min(1).max(240) }))
+        .array(z.object({ de: z.enum(["pessoa", "marca"]), texto: ateLimite(140, 1) }))
         .max(5)
         .default([]),
     ),

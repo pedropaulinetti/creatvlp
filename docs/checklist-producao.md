@@ -41,14 +41,15 @@
 - [x] Redirect URLs do Auth corrigidas (antes só `/admin` era permitido)
 - [x] Workspace órfão removido automaticamente quando o último membro sai
 - [x] Chaves estrangeiras para `profiles`, que faltavam e quebravam duas telas
+- [x] **SMTP próprio (Resend) e e-mails de autenticação.** `smtp.resend.com:465`
+      enviando de `nao-responda@mail.creatv.com.br`. Cadastro e recuperação de senha
+      mandam código de 6 dígitos válido por 10 minutos, sem link mágico. Os templates
+      são versionados em `scripts/configure-auth-emails.mjs` (`npm run auth:emails`).
 
 ## Antes de abrir a beta
 
 - [ ] **Configurar `OPENROUTER_API_KEY`** nos segredos da Edge Function.
       Sem ela nenhuma geração real acontece. Todo o resto já está publicado e testado.
-- [ ] **Configurar SMTP próprio** (Resend) em Authentication → SMTP Settings.
-      O SMTP embutido do Supabase entrega poucos e-mails por hora; com ele,
-      cadastro e recuperação falham a partir da terceira pessoa na mesma hora.
 - [ ] Rodar `npm run test:e2e` apontando para o projeto de produção
 - [ ] Definir quem são os administradores de plataforma:
       `update public.profiles set platform_role = 'admin' where email = '...'`
@@ -62,8 +63,9 @@
 - **Integração com Meta Ads.** Existe uma área marcada como “em breve” em Rotinas,
   sem dado falso e sem simulação de conexão. Os resultados são registrados
   manualmente até ela existir.
-- **E-mail transacional via Resend.** As notificações internas funcionam sem ele;
-  a aplicação não depende de Resend para operar.
+- **E-mail transacional de produto via Resend.** A Resend já manda os códigos de
+  autenticação, mas as notificações internas (rotina concluída, crédito acabando)
+  continuam só dentro do app. A aplicação não depende de e-mail para operar.
 - **Convite de membros por e-mail.** O modelo de dados suporta múltiplos membros;
   a tela de convite chega depois da beta.
 
@@ -71,8 +73,8 @@
 
 - O CLI do Supabase (2.115) recusa tokens `sbp_v0_`. Migrations, tipos e deploy de
   funções usam a Management API; os scripts em `scripts/` fazem isso.
-- O teste de cadastro cobre a validação do formulário, não o envio real de e-mail,
-  por causa do limite do SMTP embutido. A criação de conta de verdade é exercitada
-  pelo teste de RLS.
+- O teste de cadastro cobre a validação do formulário, não o envio real de e-mail:
+  conferir um código de seis dígitos exige ler a caixa de entrada. A criação de
+  conta de verdade é exercitada pelo teste de RLS.
 - A geração de imagem é sequencializada por campanha em no máximo 5 caminhos por
   chamada, para caber no tempo de execução da Edge Function.

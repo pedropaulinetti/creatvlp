@@ -152,7 +152,8 @@ test.describe("do cadastro ao criativo na biblioteca", () => {
     await expect(page.getByText("Aprovado").first()).toBeVisible({ timeout: 20_000 });
   });
 
-  test("11. criar rotina, começando com geração automática desligada", async ({ page }) => {
+  // Rotinas está travada como "em breve": a rota devolve para o início e a tela não abre.
+  test.skip("11. criar rotina, começando com geração automática desligada", async ({ page }) => {
     await signIn(page, email);
     await page.goto("/app/rotinas");
 

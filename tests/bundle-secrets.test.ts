@@ -23,6 +23,7 @@ const PROIBIDOS: { nome: string; padrao: RegExp }[] = [
   { nome: "chave do OpenRouter", padrao: /sk-or-v1-[A-Za-z0-9]{20,}/ },
   { nome: "token pessoal do Supabase", padrao: /sbp_(v0_)?[a-f0-9]{32,}/ },
   { nome: "chave secreta do Supabase", padrao: /sb_secret_[A-Za-z0-9_-]{20,}/ },
+  { nome: "chave da Resend", padrao: /re_[A-Za-z0-9]{8,}_[A-Za-z0-9]{20,}/ },
   // JWT com role de serviço: o payload contém "service_role".
   { nome: "service role key (JWT)", padrao: /eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{40,}/ },
   { nome: "URL de conexão do Postgres", padrao: /postgres(ql)?:\/\/[^\s"']+:[^\s"']+@/ },

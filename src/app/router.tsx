@@ -20,23 +20,22 @@ const lazyPage = (loader: () => Promise<{ default: React.ComponentType }>) => {
   );
 };
 
-// A landing e a pesquisa continuam sendo as páginas legadas, com o CSS próprio delas.
-const LandingPage = React.lazy(() =>
-  import("@/legacy/pages.jsx").then((module) => ({ default: module.LandingPage })),
-);
+// A landing tem CSS próprio (tema escuro). A pesquisa continua sendo a página legada.
+const LandingPage = React.lazy(() => import("@/pages/LandingPage"));
 const ResearchPage = React.lazy(() =>
   import("@/legacy/pages.jsx").then((module) => ({ default: module.ConversationalResearchPage })),
 );
 
-const legacy = (Component: React.LazyExoticComponent<React.ComponentType>) => (
+// Páginas de superfície "site": CSS próprio, sem o fallback claro do app.
+const surface = (Component: React.LazyExoticComponent<React.ComponentType>) => (
   <React.Suspense fallback={null}>
     <Component />
   </React.Suspense>
 );
 
 export const router = createBrowserRouter([
-  { path: "/", element: legacy(LandingPage) },
-  { path: "/pesquisa", element: legacy(ResearchPage) },
+  { path: "/", element: surface(LandingPage) },
+  { path: "/pesquisa", element: surface(ResearchPage) },
 
   {
     element: <RequireSupabaseOutlet />,
@@ -66,7 +65,8 @@ export const router = createBrowserRouter([
               { path: "campanhas", element: lazyPage(() => import("@/pages/CampaignsPage")) },
               { path: "campanhas/nova", element: lazyPage(() => import("@/pages/NewCampaignPage")) },
               { path: "campanhas/:campaignId", element: lazyPage(() => import("@/pages/CampaignPage")) },
-              { path: "rotinas", element: lazyPage(() => import("@/pages/RoutinesPage")) },
+              // Rotinas ainda não está liberada: o menu fica travado e a rota devolve para o início.
+              { path: "rotinas", element: <Navigate to="/app" replace /> },
               { path: "biblioteca", element: lazyPage(() => import("@/pages/LibraryPage")) },
               { path: "marca", element: lazyPage(() => import("@/pages/BrandPage")) },
               { path: "configuracoes", element: lazyPage(() => import("@/pages/SettingsPage")) },

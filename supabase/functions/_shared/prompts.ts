@@ -276,6 +276,22 @@ export function imagePrompt(
  * sair com erro de ortografia e não é editável depois. Por isso as duas versões
  * convivem e quem escolhe é quem vai publicar.
  */
+/**
+ * Se uma cor é clara ou escura, pela luminância relativa.
+ *
+ * Dizer o hex não basta: o modelo monta o contraste melhor quando sabe qual
+ * das duas é o claro. O limiar de 0.5 é o mesmo que a WCAG usa para decidir
+ * sobre qual fundo um texto se lê.
+ */
+function claraOuEscura(hex: string): string {
+  const canal = (inicio: number) => {
+    const valor = Number.parseInt(hex.slice(inicio, inicio + 2), 16) / 255;
+    return Number.isNaN(valor) ? 0 : valor <= 0.03928 ? valor / 12.92 : ((valor + 0.055) / 1.055) ** 2.4;
+  };
+  const luminancia = 0.2126 * canal(1) + 0.7152 * canal(3) + 0.0722 * canal(5);
+  return luminancia > 0.5 ? "clara" : "escura";
+}
+
 export function pecaCompletaPrompt(
   peca: {
     /*
@@ -409,9 +425,30 @@ export function pecaCompletaPrompt(
      * paleta. Medido: pedindo só "a paleta é esta", o modelo entregou a peça
      * inteira em branco no preto e ignorou o laranja da marca.
      */
-    `Paleta: ${peca.palette.ink} como fundo escuro e ${peca.palette.surface} como cor clara.`,
+    /*
+     * Os papéis, ditos como são.
+     *
+     * A frase anterior mandava usar `ink` "como fundo escuro" — e `ink` é a
+     * cor do TEXTO. Numa marca de fundo branco e texto preto, isso pedia peça
+     * preta. Toda campanha saía escura, qualquer que fosse a marca, e a cor de
+     * fundo de verdade virava só "cor clara", sem função.
+     */
+    `Paleta da marca, e nenhuma outra: ${peca.palette.surface} é a cor de fundo (${claraOuEscura(peca.palette.surface)}) e ${peca.palette.ink} é a cor do texto sobre ela (${claraOuEscura(peca.palette.ink)}).`,
+    `Se a estrutura de referência pedir um fundo escuro, inverta os dois — ${peca.palette.ink} no fundo e ${peca.palette.surface} no texto — em vez de trazer um preto ou branco que não são da marca.`,
     `OBRIGATÓRIO: a cor ${peca.palette.accent} tem de aparecer em destaque na peça — no botão, no preço ou numa palavra do título. Sem ela a peça não serve, porque é a cor da marca.`,
-    `Tipografia sem serifa geométrica, próxima de ${peca.typography.headline}.`,
+    /*
+     * A classificação estava fixa em "sem serifa geométrica", o que contradizia
+     * a fonte pedida logo em seguida: mandar desenhar "sem serifa geométrica
+     * próxima de Kefir" — uma display arredondada — faz o modelo obedecer à
+     * classificação e ignorar o nome.
+     */
+    peca.typography.headline
+      ? `Tipografia: ${peca.typography.headline} no título${
+          peca.typography.body && peca.typography.body !== peca.typography.headline
+            ? ` e ${peca.typography.body} no texto de apoio`
+            : ""
+        }. Respeite o caráter dessa tipografia; não a troque por uma sans genérica de sistema.`
+      : "",
     "",
     "TEXTO — a peça contém estes blocos e NADA ALÉM DELES. Escreva exatamente assim, em português do Brasil, sem alterar, traduzir, abreviar ou acrescentar palavra nenhuma:",
     `Título: ${peca.headline.replace(/\*/g, "")}`,

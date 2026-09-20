@@ -280,6 +280,49 @@ export async function fetchImage(
   }
 }
 
+/**
+ * Baixa um arquivo de fonte do site da marca.
+ *
+ * Separada de `fetchImage` porque o `Accept` e o tipo aceito são outros — e
+ * porque servidor de fonte é irregular no `content-type`: manda
+ * `font/woff2`, `application/font-woff2` ou `octet-stream` conforme a
+ * configuração. A extensão do endereço vale como segunda prova.
+ */
+export async function fetchFont(
+  rawUrl: string,
+  maxBytes = 2_000_000,
+): Promise<{ bytes: Uint8Array; mimeType: string } | null> {
+  try {
+    const url = assertSafeUrl(rawUrl);
+    await assertSafeResolution(url);
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUTS.fetchUrlMs);
+    try {
+      const response = await fetch(url.toString(), {
+        redirect: "follow",
+        signal: controller.signal,
+        headers: { "User-Agent": "CreatvOS/1.0 (+https://www.creatv.com.br)", Accept: "font/*,*/*" },
+      });
+      if (!response.ok) return null;
+
+      const mimeType = (response.headers.get("content-type") ?? "").split(";")[0].trim();
+      const tipoServe = /^(font\/|application\/(x-)?font|application\/octet-stream)/i.test(mimeType);
+      const extensaoServe = /\.(woff2?|otf|ttf)(\?|$)/i.test(url.pathname + url.search);
+      if (!tipoServe && !extensaoServe) return null;
+
+      const buffer = await response.arrayBuffer();
+      if (buffer.byteLength > maxBytes || buffer.byteLength === 0) return null;
+
+      return { bytes: new Uint8Array(buffer), mimeType: mimeType || "font/woff2" };
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch {
+    return null;
+  }
+}
+
 /** Usada para CSS e para os JSON públicos do Shopify. Devolve "" em falha. */
 export async function fetchText(rawUrl: string, expectedType: string, maxBytes = 400_000): Promise<string> {
   try {

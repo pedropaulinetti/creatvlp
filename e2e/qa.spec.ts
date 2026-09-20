@@ -65,9 +65,6 @@ test("percorre as telas e captura o console", async ({ page }, testInfo) => {
   await page.goto("/app/marca");
   await tirar("08-marca");
 
-  await page.goto("/app/rotinas");
-  await tirar("09-rotinas-vazio");
-
   await page.goto("/app/biblioteca");
   await tirar("10-biblioteca-vazia");
 

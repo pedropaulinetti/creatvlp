@@ -5,14 +5,15 @@ import { Download, ExternalLink, RefreshCw, Search } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { Badge, Divider, Panel } from "@/components/ui/surface";
-import { Input, MonoLabel, Field } from "@/components/ui/field";
+import { Input, MonoLabel } from "@/components/ui/field";
 import { Select, Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/controls";
-import { Dialog, DialogContent, DialogFooter } from "@/components/ui/overlays";
+import { Dialog, DialogContent } from "@/components/ui/overlays";
 import { EmptyState, ErrorState, LoadingBlock, InlineError } from "@/components/ui/states";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { requireSupabase, supabase } from "@/lib/supabase";
 import { callFunction, functionErrorMessage } from "@/lib/functions";
 import { formatUSD, formatInt, initials } from "@/lib/utils";
+import { ContasTab } from "@/features/admin/ContasTab";
 import { diagnosisSteps } from "@/legacy/pages.jsx";
 
 type ResearchRow = {
@@ -24,6 +25,12 @@ type ResearchRow = {
   email: string;
   status: string;
   respostas: Record<string, string | string[]>;
+};
+
+const FEEDBACK_KIND: Record<string, string> = {
+  sugestao: "Sugestão",
+  problema: "Algo quebrado",
+  elogio: "Elogio",
 };
 
 /** Jobs parados em "processing" há mais de 10 minutos são considerados travados. */
@@ -56,21 +63,22 @@ export default function AdminPage() {
       <main className="mx-auto flex w-full max-w-[1180px] flex-col gap-6 px-5 pb-14 md:px-10">
         <InlineError>{error}</InlineError>
 
-        <Tabs defaultValue="visao">
+        <Tabs defaultValue="contas">
           <TabsList>
+            <TabsTrigger value="contas">Contas</TabsTrigger>
             <TabsTrigger value="visao">Visão geral</TabsTrigger>
-            <TabsTrigger value="workspaces">Workspaces</TabsTrigger>
             <TabsTrigger value="jobs">Jobs</TabsTrigger>
             <TabsTrigger value="custos">Custos</TabsTrigger>
             <TabsTrigger value="auditoria">Auditoria</TabsTrigger>
+            <TabsTrigger value="sugestoes">Sugestões</TabsTrigger>
             <TabsTrigger value="pesquisa">Pesquisa</TabsTrigger>
           </TabsList>
 
+          <TabsContent value="contas" className="pt-6">
+            <ContasTab onError={setError} />
+          </TabsContent>
           <TabsContent value="visao" className="pt-6">
             <Overview />
-          </TabsContent>
-          <TabsContent value="workspaces" className="pt-6">
-            <Workspaces onError={setError} />
           </TabsContent>
           <TabsContent value="jobs" className="pt-6">
             <Jobs onError={setError} />
@@ -80,6 +88,9 @@ export default function AdminPage() {
           </TabsContent>
           <TabsContent value="auditoria" className="pt-6">
             <AuditLog />
+          </TabsContent>
+          <TabsContent value="sugestoes" className="pt-6">
+            <Feedback onError={setError} />
           </TabsContent>
           <TabsContent value="pesquisa" className="pt-6">
             <Research />
@@ -151,141 +162,6 @@ function Overview() {
         </div>
       ))}
     </dl>
-  );
-}
-
-function Workspaces({ onError }: { onError: (message: string) => void }) {
-  const queryClient = useQueryClient();
-  const [editing, setEditing] = React.useState<{ id: string; name: string; plan: string } | null>(null);
-  const [bonusImages, setBonusImages] = React.useState(0);
-  const [plan, setPlan] = React.useState("beta");
-
-  const query = useQuery({
-    queryKey: ["admin-workspaces"],
-    enabled: Boolean(supabase),
-    queryFn: async () => {
-      const { data, error } = await supabase!
-        .from("workspaces")
-        .select("id, name, plan, created_at, quota:usage_quotas(images_used, images_reserved, campaigns_used, bonus_images), members:workspace_members(count)")
-        .order("created_at", { ascending: false })
-        .limit(100);
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
-
-  const updatePlan = useMutation({
-    mutationFn: async ({ id, nextPlan, bonus }: { id: string; nextPlan: string; bonus: number }) => {
-      const client = requireSupabase();
-      const { error } = await client
-        .from("workspaces")
-        .update({ plan: nextPlan as "beta" | "growth" | "studio" })
-        .eq("id", id);
-      if (error) throw error;
-
-      if (bonus > 0) {
-        const { error: quotaError } = await client
-          .from("usage_quotas")
-          .update({ bonus_images: bonus, plan: nextPlan as "beta" | "growth" | "studio" })
-          .eq("workspace_id", id);
-        if (quotaError) throw quotaError;
-      }
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["admin-workspaces"] });
-      setEditing(null);
-      setBonusImages(0);
-      toast.success("Workspace atualizado");
-    },
-    onError: () => onError("Não conseguimos atualizar o workspace."),
-  });
-
-  if (query.isLoading) return <LoadingBlock label="Carregando workspaces" />;
-  if (query.error) return <ErrorState description="Falha ao listar workspaces." onRetry={() => void query.refetch()} />;
-
-  return (
-    <div className="flex flex-col">
-      <div className="hidden grid-cols-[1fr_100px_100px_120px_100px] gap-4 border-b border-line px-3 pb-2 md:grid">
-        <span className="label-mono">Workspace</span>
-        <span className="label-mono">Plano</span>
-        <span className="label-mono">Pessoas</span>
-        <span className="label-mono">Imagens</span>
-        <span className="label-mono" />
-      </div>
-
-      {(query.data ?? []).map((workspace) => {
-        const quota = Array.isArray(workspace.quota) ? workspace.quota[0] : workspace.quota;
-        const memberCount = Array.isArray(workspace.members)
-          ? (workspace.members[0] as { count: number } | undefined)?.count ?? 0
-          : 0;
-        return (
-          <div
-            key={workspace.id}
-            className="grid grid-cols-1 gap-2 border-b border-line-soft px-3 py-3 md:grid-cols-[1fr_100px_100px_120px_100px] md:items-center md:gap-4"
-          >
-            <div className="flex min-w-0 flex-col">
-              <span className="truncate text-[14px] text-ink">{workspace.name}</span>
-              <span className="font-mono text-[11px] text-ink-faint">{workspace.id.slice(0, 8)}</span>
-            </div>
-            <Badge tone="muted">{workspace.plan}</Badge>
-            <span className="text-[13px] text-ink-2">{memberCount}</span>
-            <span className="text-[13px] text-ink-2">
-              {(quota?.images_used ?? 0) + (quota?.images_reserved ?? 0)}
-              {quota?.bonus_images ? ` (+${quota.bonus_images})` : ""}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setEditing({ id: workspace.id, name: workspace.name, plan: workspace.plan });
-                setPlan(workspace.plan);
-                setBonusImages(quota?.bonus_images ?? 0);
-              }}
-            >
-              Ajustar
-            </Button>
-          </div>
-        );
-      })}
-
-      <Dialog open={Boolean(editing)} onOpenChange={(value) => !value && setEditing(null)}>
-        <DialogContent title="Ajustar workspace" description={editing?.name}>
-          <div className="flex flex-col gap-4">
-            <Field label="Plano">
-              <Select
-                value={plan}
-                onValueChange={setPlan}
-                options={[
-                  { value: "beta", label: "Beta" },
-                  { value: "growth", label: "Growth" },
-                  { value: "studio", label: "Studio" },
-                ]}
-                aria-label="Plano"
-              />
-            </Field>
-            <Field label="Créditos extras de imagem" hint="Somados ao limite do plano neste ciclo.">
-              <Input
-                type="number"
-                min={0}
-                value={bonusImages}
-                onChange={(event) => setBonusImages(Number(event.target.value))}
-              />
-            </Field>
-          </div>
-          <DialogFooter>
-            <Button variant="quiet" onClick={() => setEditing(null)}>
-              Cancelar
-            </Button>
-            <Button
-              loading={updatePlan.isPending}
-              onClick={() => editing && updatePlan.mutate({ id: editing.id, nextPlan: plan, bonus: bonusImages })}
-            >
-              Salvar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
   );
 }
 
@@ -671,6 +547,137 @@ function Research() {
       <p className="text-[12px] text-ink-faint">
         Prompts completos não são exibidos por padrão. Para investigar uma geração, use a aba Jobs.
       </p>
+    </div>
+  );
+}
+
+/** Caixa de sugestões da beta: o que chega pelo botão flutuante do app. */
+function Feedback({ onError }: { onError: (message: string) => void }) {
+  const { profile } = useAuth();
+  const queryClient = useQueryClient();
+  const [filter, setFilter] = React.useState("aberto");
+
+  const query = useQuery({
+    queryKey: ["admin-feedback", filter],
+    enabled: Boolean(supabase),
+    queryFn: async () => {
+      let request = supabase!
+        .from("feedback")
+        .select("*, autor:profiles(full_name, email)")
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (filter !== "todos") request = request.eq("status", filter);
+      const { data, error } = await request;
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const update = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const { error } = await requireSupabase()
+        .from("feedback")
+        .update({
+          status,
+          handled_at: status === "aberto" ? null : new Date().toISOString(),
+          handled_by: status === "aberto" ? null : (profile?.id ?? null),
+        })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Sugestão atualizada");
+      void queryClient.invalidateQueries({ queryKey: ["admin-feedback"] });
+    },
+    onError: () => onError("Não foi possível atualizar a sugestão."),
+  });
+
+  if (query.isLoading) return <LoadingBlock label="Carregando sugestões" />;
+  if (query.error)
+    return <ErrorState description="Não conseguimos ler as sugestões." onRetry={() => void query.refetch()} />;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <Select
+          value={filter}
+          onValueChange={setFilter}
+          aria-label="Filtrar por situação"
+          className="w-[170px]"
+          options={[
+            { value: "aberto", label: "Abertas" },
+            { value: "lido", label: "Lidas" },
+            { value: "resolvido", label: "Resolvidas" },
+            { value: "todos", label: "Todas" },
+          ]}
+        />
+        <span className="text-[12.5px] text-ink-muted">{formatInt(query.data?.length ?? 0)} recados</span>
+        <Button
+          variant="quiet"
+          size="sm"
+          className="ml-auto"
+          onClick={() => void query.refetch()}
+          aria-label="Recarregar sugestões"
+        >
+          <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+          Recarregar
+        </Button>
+      </div>
+
+      {!query.data?.length ? (
+        <EmptyState title="Nada por aqui" description="Os recados enviados pelo botão de sugestão aparecem nesta aba." />
+      ) : (
+        <div className="flex flex-col gap-2.5">
+          {query.data.map((item) => {
+            const autor = item.autor as { full_name?: string; email?: string } | null;
+            const tone = item.kind === "problema" ? "danger" : item.kind === "elogio" ? "positive" : "accent";
+            return (
+              <Panel key={item.id} className="flex flex-col gap-2.5 px-5 py-4">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                  <Badge tone={tone as "accent" | "positive" | "danger"}>{FEEDBACK_KIND[item.kind] ?? item.kind}</Badge>
+                  <span className="text-[13px] text-ink">{autor?.full_name || autor?.email || "Anônimo"}</span>
+                  {item.path && <span className="font-mono text-[11px] text-ink-faint">{item.path}</span>}
+                  <span className="ml-auto font-mono text-[11px] text-ink-faint">
+                    {new Date(item.created_at).toLocaleString("pt-BR")}
+                  </span>
+                </div>
+
+                <p className="whitespace-pre-wrap text-[13.5px] leading-relaxed text-ink">{item.message}</p>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {item.status !== "aberto" && (
+                    <Badge tone="muted">{item.status === "lido" ? "Lida" : "Resolvida"}</Badge>
+                  )}
+                  <div className="ml-auto flex gap-2">
+                    {item.status !== "lido" && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => update.mutate({ id: item.id, status: "lido" })}
+                      >
+                        Marcar como lida
+                      </Button>
+                    )}
+                    {item.status !== "resolvido" ? (
+                      <Button size="sm" onClick={() => update.mutate({ id: item.id, status: "resolvido" })}>
+                        Resolver
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="quiet"
+                        size="sm"
+                        onClick={() => update.mutate({ id: item.id, status: "aberto" })}
+                      >
+                        Reabrir
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </Panel>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -40,6 +40,27 @@ export function validateImageFile(file: File, { allowSvg = true, maxBytes = MAX_
   return { ok: true };
 }
 
+/*
+ * Fonte é o único arquivo não-imagem que a marca guarda. O navegador é
+ * irregular no `type` de fonte — manda vazio, `application/octet-stream` ou o
+ * `font/*` correto conforme o sistema — então a extensão também vale como
+ * prova.
+ */
+const FONT_MIME = ["font/ttf", "font/otf", "font/woff", "font/woff2",
+  "application/font-woff", "application/x-font-ttf", "application/x-font-opentype",
+  "application/octet-stream", ""];
+const FONT_EXT = /\.(ttf|otf|woff2?)$/i;
+
+export function validateFontFile(file: File, { maxBytes = MAX_BYTES } = {}): UploadValidation {
+  if (!FONT_EXT.test(file.name) || !FONT_MIME.includes(file.type)) {
+    return { ok: false, reason: "Formato não aceito. Envie TTF, OTF, WOFF ou WOFF2." };
+  }
+  if (file.size > maxBytes) {
+    return { ok: false, reason: `Arquivo grande demais. O limite é ${Math.round(maxBytes / 1024 / 1024)} MB.` };
+  }
+  return { ok: true };
+}
+
 const EXTENSION: Record<string, string> = {
   "image/png": "png",
   "image/jpeg": "jpg",
@@ -55,12 +76,18 @@ export async function uploadBrandFile(params: {
   brandId: string;
   resourceType: string;
   file: File;
+  /** "fonte" troca a validação: o resto do kit da marca é imagem. */
+  tipo?: "imagem" | "fonte";
 }): Promise<string> {
   const client = requireSupabase();
-  const validation = validateImageFile(params.file);
+  const validation =
+    params.tipo === "fonte" ? validateFontFile(params.file) : validateImageFile(params.file);
   if (!validation.ok) throw new Error(validation.reason);
 
-  const extension = EXTENSION[params.file.type] ?? "bin";
+  const extension =
+    params.tipo === "fonte"
+      ? (params.file.name.match(FONT_EXT)?.[1]?.toLowerCase() ?? "ttf")
+      : EXTENSION[params.file.type] ?? "bin";
   const path = `${params.workspaceId}/${params.brandId}/${params.resourceType}/${crypto.randomUUID()}.${extension}`;
 
   const { error } = await client.storage.from(params.bucket).upload(path, params.file, {

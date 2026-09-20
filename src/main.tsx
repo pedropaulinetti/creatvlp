@@ -24,11 +24,11 @@ const queryClient = new QueryClient({
   },
 });
 
-/** A landing legada mantém o tema escuro; o app usa o tema claro de papel. */
+/** Só a pesquisa legada mantém o tema escuro. Landing e app dividem o papel claro. */
 function SurfaceTheme() {
   useEffect(() => {
     const apply = () => {
-      const legacy = ["/", "/pesquisa"].includes(window.location.pathname.replace(/\/$/, "") || "/");
+      const legacy = window.location.pathname.replace(/\/$/, "") === "/pesquisa";
       document.documentElement.dataset.surface = legacy ? "site" : "app";
     };
     apply();

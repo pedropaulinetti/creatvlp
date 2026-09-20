@@ -11,9 +11,11 @@ import { EmptyState, ErrorState, LoadingBlock, InlineError } from "@/components/
 import { useWorkspace } from "@/features/workspace/WorkspaceProvider";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { requireSupabase, supabase } from "@/lib/supabase";
-import { signedUrl, uploadBrandFile, validateImageFile } from "@/lib/storage";
+import { signedUrl, signedUrls, uploadBrandFile, validateImageFile } from "@/lib/storage";
 import { CHANNELS, FORMATS, FORMAT_LABEL } from "@/lib/schemas";
-import { FotoDoProduto } from "@/components/FotoDoProduto";
+import { CamposDoProduto, GaleriaDoProduto } from "@/features/brand/CamposDoProduto";
+import { ListaDeFontes, type FonteDaMarca } from "@/features/brand/ListaDeFontes";
+import { GaleriaDeReferencias } from "@/features/brand/GaleriaDeReferencias";
 import { cn } from "@/lib/utils";
 import type { Database } from "@/lib/database.types";
 
@@ -190,6 +192,154 @@ export default function BrandPage() {
     },
     onError: () => setError("Não conseguimos salvar. Verifique sua conexão e tente de novo."),
   });
+
+  /*
+   * O arquivo da fonte fica guardado com a marca, em `brand_assets`. Não é ele
+   * que vai para a geração — o modelo recebe o nome da família — mas é dele
+   * que o nome foi lido, e tê-lo permite conferir depois de qual arquivo o
+   * nome saiu.
+   */
+  async function enviarFonte(arquivo: File, familia: string) {
+    if (!brand || !workspaceId) return;
+    try {
+      const client = requireSupabase();
+      const caminho = await uploadBrandFile({
+        bucket: "brand-assets",
+        workspaceId,
+        brandId: brand.id,
+        resourceType: "fonte",
+        file: arquivo,
+        tipo: "fonte",
+      });
+      await client.from("brand_assets").insert({
+        workspace_id: workspaceId,
+        brand_id: brand.id,
+        kind: "fonte",
+        storage_path: caminho,
+        mime_type: arquivo.type || "application/octet-stream",
+        size_bytes: arquivo.size,
+        label: familia,
+      });
+      await assets.refetch();
+      toast.success(`Fonte ${familia} guardada`);
+    } catch {
+      toast.error("Não conseguimos guardar o arquivo da fonte.");
+    }
+  }
+
+  /*
+   * As fontes guardadas, com endereço assinado para o navegador conseguir
+   * mostrar cada uma com a própria cara.
+   */
+  const arquivosDeFonte = (assets.data ?? []).filter((asset) => asset.kind === "fonte");
+
+  const urlsDasFontes = useQuery({
+    queryKey: ["brand-fonts", brand?.id, arquivosDeFonte.map((item) => item.id).join(",")],
+    enabled: arquivosDeFonte.length > 0,
+    staleTime: 30 * 60_000,
+    queryFn: () => signedUrls("brand-assets", arquivosDeFonte.map((item) => item.storage_path)),
+  });
+
+  const fontes: FonteDaMarca[] = arquivosDeFonte.map((asset) => ({
+    id: asset.id,
+    // Enviadas antes desta tela guardavam "Família · papel" no rótulo.
+    familia: (asset.label || "").split(" · ")[0] || "Sem nome",
+    url: urlsDasFontes.data?.get(asset.storage_path) ?? null,
+  }));
+
+  /*
+   * As referências, na ordem que vale — é ela que decide quais três vão para a
+   * geração, e agora está gravada em vez de ficar a cargo do banco.
+   */
+  const arquivosDeReferencia = React.useMemo(
+    () =>
+      (assets.data ?? [])
+        .filter((asset) => asset.kind === "referencia")
+        .sort((a, b) => a.position - b.position || a.created_at.localeCompare(b.created_at)),
+    [assets.data],
+  );
+
+  const urlsDasReferencias = useQuery({
+    queryKey: ["brand-refs", brand?.id, arquivosDeReferencia.map((item) => item.id).join(",")],
+    enabled: arquivosDeReferencia.length > 0,
+    staleTime: 30 * 60_000,
+    queryFn: () => signedUrls("brand-assets", arquivosDeReferencia.map((item) => item.storage_path)),
+  });
+
+  const referencias = arquivosDeReferencia.map((asset) => ({
+    id: asset.id,
+    url: urlsDasReferencias.data?.get(asset.storage_path) ?? null,
+  }));
+
+  async function enviarReferencias(arquivos: File[]) {
+    if (!brand || !workspaceId) return;
+    const client = requireSupabase();
+    let proxima = arquivosDeReferencia.length;
+
+    for (const arquivo of arquivos) {
+      const validacao = validateImageFile(arquivo, { allowSvg: false });
+      if (!validacao.ok) {
+        toast.error(validacao.reason);
+        continue;
+      }
+      try {
+        const caminho = await uploadBrandFile({
+          bucket: "brand-assets",
+          workspaceId,
+          brandId: brand.id,
+          resourceType: "referencia",
+          file: arquivo,
+        });
+        await client.from("brand_assets").insert({
+          workspace_id: workspaceId,
+          brand_id: brand.id,
+          kind: "referencia",
+          storage_path: caminho,
+          mime_type: arquivo.type,
+          size_bytes: arquivo.size,
+          position: proxima,
+        });
+        proxima += 1;
+      } catch {
+        toast.error("Não conseguimos enviar uma das imagens.");
+      }
+    }
+    await assets.refetch();
+  }
+
+  async function removerReferencia(id: string) {
+    const client = requireSupabase();
+    await client.from("brand_assets").update({ deleted_at: new Date().toISOString() }).eq("id", id);
+    await assets.refetch();
+  }
+
+  /** Promover é ir para o começo: as três primeiras são as que entram. */
+  async function tornarReferenciaPrincipal(id: string) {
+    const client = requireSupabase();
+    const reordenadas = [
+      ...arquivosDeReferencia.filter((item) => item.id === id),
+      ...arquivosDeReferencia.filter((item) => item.id !== id),
+    ];
+    await Promise.all(
+      reordenadas.map((item, indice) =>
+        client.from("brand_assets").update({ position: indice }).eq("id", item.id),
+      ),
+    );
+    await assets.refetch();
+  }
+
+  async function removerFonte(id: string) {
+    try {
+      const client = requireSupabase();
+      await client
+        .from("brand_assets")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id);
+      await assets.refetch();
+    } catch {
+      toast.error("Não conseguimos remover a fonte.");
+    }
+  }
 
   async function uploadLogo(file: File) {
     if (!workspaceId || !brand) return;
@@ -506,38 +656,21 @@ export default function BrandPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Tipografia de destaque" optional>
-              <Input
-                value={draft.typography.headline}
-                onChange={(event) => patch({ typography: { ...draft.typography, headline: event.target.value } })}
-                placeholder="Instrument Serif"
-              />
-            </Field>
-            <Field label="Tipografia de texto" optional>
-              <Input
-                value={draft.typography.body}
-                onChange={(event) => patch({ typography: { ...draft.typography, body: event.target.value } })}
-                placeholder="Inter"
-              />
-            </Field>
-          </div>
+          <ListaDeFontes
+            fontes={fontes}
+            tipografia={draft.typography}
+            aoMudarPapel={(papel, familia) => patch({ typography: { ...draft.typography, [papel]: familia } })}
+            aoEnviar={enviarFonte}
+            aoRemover={removerFonte}
+          />
 
           <div className="flex flex-col gap-2.5">
-            <span className="text-[13px] font-medium text-ink">Referências e exemplos</span>
-            {assets.data?.filter((asset) => asset.kind !== "logo").length ? (
-              <div className="flex flex-wrap gap-2">
-                {assets.data
-                  .filter((asset) => asset.kind !== "logo")
-                  .map((asset) => (
-                    <Badge key={asset.id} tone="muted">
-                      {asset.kind.replace("_", " ")}
-                    </Badge>
-                  ))}
-              </div>
-            ) : (
-              <Hint>Nenhuma referência enviada ainda.</Hint>
-            )}
+            <GaleriaDeReferencias
+              referencias={referencias}
+              aoEnviar={enviarReferencias}
+              aoRemover={removerReferencia}
+              aoTornarPrincipal={tornarReferenciaPrincipal}
+            />
           </div>
         </TabsContent>
       </Tabs>
@@ -680,6 +813,75 @@ function ProductsSection({
   });
 
   /*
+   * As fotos de todos os produtos numa consulta só. Uma por produto faria a
+   * tela disparar uma dezena de requisições ao abrir.
+   */
+  const fotos = useQuery({
+    queryKey: ["product-images", brandId],
+    enabled: Boolean(supabase && (products.data ?? []).length),
+    queryFn: async () => {
+      const { data } = await supabase!
+        .from("product_images")
+        .select("id, product_id, storage_path, position")
+        .in("product_id", (products.data ?? []).map((item) => item.id))
+        .is("deleted_at", null)
+        .order("position");
+      return data ?? [];
+    },
+  });
+
+  const caminhosDe = (produto: Database["public"]["Tables"]["products"]["Row"]) => {
+    const daTabela = (fotos.data ?? [])
+      .filter((foto) => foto.product_id === produto.id)
+      .map((foto) => foto.storage_path);
+    // A principal manda, mesmo que a ordem da tabela diga outra coisa.
+    const principal = produto.image_path;
+    if (!principal) return daTabela;
+    return [principal, ...daTabela.filter((caminho) => caminho !== principal)];
+  };
+
+  const recarregarFotos = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["product-images", brandId] }),
+      queryClient.invalidateQueries({ queryKey: ["products"] }),
+    ]);
+
+  async function removerFoto(produtoId: string, caminho: string, eraPrincipal: boolean) {
+    const client = requireSupabase();
+    await client
+      .from("product_images")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("product_id", produtoId)
+      .eq("storage_path", caminho);
+
+    /*
+     * Apagar a principal não pode deixar o produto sem foto enquanto ainda há
+     * outras: a próxima da fila assume.
+     */
+    if (eraPrincipal) {
+      const { data: restantes } = await client
+        .from("product_images")
+        .select("storage_path")
+        .eq("product_id", produtoId)
+        .is("deleted_at", null)
+        .order("position")
+        .limit(1);
+      await client
+        .from("products")
+        .update({ image_path: restantes?.[0]?.storage_path ?? null })
+        .eq("id", produtoId);
+    }
+    await recarregarFotos();
+  }
+
+  async function tornarPrincipal(produtoId: string, caminho: string) {
+    const client = requireSupabase();
+    await client.from("products").update({ image_path: caminho }).eq("id", produtoId);
+    await recarregarFotos();
+    toast.success("Foto principal atualizada");
+  }
+
+  /*
    * A foto do produto entra aqui quando o site não tinha nenhuma para dar — e
    * é aqui também que se troca a que veio errada da leitura. Sem foto, a peça
    * gerada inventa o objeto em vez de mostrar o que a marca vende.
@@ -716,11 +918,6 @@ function ProductsSection({
       {(products.data ?? []).map((product) => (
         <Panel key={product.id} className="flex flex-col gap-2.5 p-4">
           <div className="flex items-center gap-2">
-            <FotoDoProduto
-              nome={product.name}
-              imagePath={product.image_path}
-              aoEnviar={(arquivo) => enviarFoto(product.id, arquivo)}
-            />
             <Input
               defaultValue={product.name}
               aria-label="Nome do produto"
@@ -738,14 +935,37 @@ function ProductsSection({
               <Trash2 className="h-3.5 w-3.5" aria-hidden />
             </Button>
           </div>
-          <Textarea
-            rows={2}
-            defaultValue={product.description}
-            aria-label="Descrição do produto"
-            placeholder="O que resolve, para quem."
-            onBlur={(event) =>
-              event.target.value !== product.description &&
-              update.mutate({ id: product.id, values: { description: event.target.value } })
+
+          <GaleriaDoProduto
+            nome={product.name}
+            caminhos={caminhosDe(product)}
+            aoEnviar={(arquivo) => enviarFoto(product.id, arquivo)}
+            aoRemover={(caminho) =>
+              void removerFoto(product.id, caminho, caminho === product.image_path)
+            }
+            aoTornarPrincipal={(caminho) => void tornarPrincipal(product.id, caminho)}
+          />
+
+          <CamposDoProduto
+            valores={{
+              name: product.name,
+              description: product.description,
+              priceCents: product.price_cents,
+              currency: product.currency,
+              url: product.url ?? "",
+              highlights: product.highlights ?? [],
+            }}
+            aoMudar={(valores) =>
+              update.mutate({
+                id: product.id,
+                values: {
+                  ...(valores.description !== undefined && { description: valores.description }),
+                  ...(valores.priceCents !== undefined && { price_cents: valores.priceCents }),
+                  ...(valores.currency !== undefined && { currency: valores.currency }),
+                  ...(valores.url !== undefined && { url: valores.url || null }),
+                  ...(valores.highlights !== undefined && { highlights: valores.highlights }),
+                },
+              })
             }
           />
         </Panel>
