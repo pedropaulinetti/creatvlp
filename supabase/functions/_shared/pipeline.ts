@@ -14,7 +14,9 @@ import { reserveCredits, confirmCredits, refundCredits } from "./credits.ts";
 import { uploadImage } from "./storage.ts";
 import { composicaoDaPeca } from "./composition.ts";
 import { carregarReferencias, segmentoDaMarca } from "./referencias.ts";
-import { planejarPecas, textoDaPeca, geracoesNecessarias } from "./pecas.ts";
+import {
+  planejarPecas, textoDaPeca, geracoesNecessarias, janelaDeEstilo, MAX_REFERENCIAS_DE_ESTILO,
+} from "./pecas.ts";
 import { notify, notifyQuotaThreshold } from "./notify.ts";
 import { DEFAULT_IMAGE_QUALITY, estimatedImageCost, imageModelFor, MODELS, type ImageQuality } from "./config.ts";
 
@@ -415,7 +417,7 @@ export async function runImages(
        * a mais dilui a anterior. A foto do produto nunca cede lugar, e o estilo
        * fica com o que sobrar.
        */
-      const doEstiloCabem = doEstilo.slice(0, 4 - (doProduto ? 1 : 0));
+      const doEstiloCabem = janelaDeEstilo(doEstilo, peca.ideia, 4 - (doProduto ? 1 : 0));
 
       const references = [doProduto, ...doEstiloCabem].filter(
         (url): url is string => Boolean(url),
@@ -634,7 +636,18 @@ async function referenciasDeEstilo(
     // A ordem é escolha de quem cuida da marca, não do que o banco devolver.
     .order("position")
     .order("created_at")
-    .limit(3);
+    /*
+     * Carrega o acervo, não as três primeiras.
+     *
+     * Era `.limit(3)`, e como o provedor aceita no máximo quatro anexos, cada
+     * peça via SEMPRE as mesmas três imagens: a leitura guardava até doze, a
+     * marca mantinha todas, e nove nunca entravam em nada. Trinta peças de uma
+     * campanha nasciam do mesmo trio de referência de luz e clima.
+     *
+     * O teto do provedor continua valendo por chamada; o que muda é que cada
+     * peça pega uma janela diferente do acervo.
+     */
+    .limit(MAX_REFERENCIAS_DE_ESTILO);
 
   const caminhos = (data ?? []).map((item) => item.storage_path).filter(Boolean);
   if (!caminhos.length) return [];

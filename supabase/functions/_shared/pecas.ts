@@ -71,14 +71,28 @@ export const ARQUETIPOS_CONHECIDOS = [...ARQUETIPOS_EM_RODIZIO, "enquete", "conv
  * caracteres, e o ajuste automático encolheu o corpo até caber. Título
  * encolhido não é título, é corpo de texto em caixa alta.
  */
-const DE_CARTAZ = new Set(["vitrine", "bloco", "destaque", "manchete"]);
-
 /**
- * Quanto de manchete um cartaz aguenta.
+ * Quanto de manchete cada desenho aguenta, em caracteres.
  *
- * 52 é o comprimento em que a frase ainda cabe em três linhas curtas no corpo
- * grande. "Mais volume de cabelo já no primeiro uso" tem 40 e sobra espaço.
+ * Um número só não serve, porque a largura de escrita não é a mesma.
+ * `bloco`, `destaque` e `manchete` escrevem na peça quase inteira; a vitrine
+ * escreve numa coluna de 39% da largura, porque o produto ocupa o resto.
+ *
+ * Medido numa peça real: "Tenha um cabelo com volume e força que te destaca"
+ * tem 48 caracteres, passou pelo limite único de 52, e na coluna da vitrine
+ * virou sete linhas empilhadas de duas palavras cada. Cabia, e mesmo assim
+ * estava errado.
+ *
+ * 34 é o que cabe em quatro linhas na coluna estreita sem encolher o corpo.
  */
+const LIMITE_POR_DESENHO: Record<string, number> = {
+  vitrine: 34,
+  bloco: 52,
+  destaque: 52,
+  manchete: 52,
+};
+
+/** O maior dos tetos, para quem só quer saber se a manchete é longa. */
 export const LIMITE_DE_MANCHETE_DE_CARTAZ = 52;
 
 export function arquetipoDaPeca(
@@ -117,9 +131,31 @@ export function arquetipoDaPeca(
    * destaque não contam: eles somem no desenho.
    */
   const letras = (headline ?? "").replace(/\*/g, "").trim().length;
-  if (DE_CARTAZ.has(valido) && letras > LIMITE_DE_MANCHETE_DE_CARTAZ) return "coluna";
+  const teto = LIMITE_POR_DESENHO[valido];
+  if (teto && letras > teto) return "coluna";
 
   return valido;
+}
+
+/** Quantas referências de estilo carregar da marca. O acervo, não uma fatia. */
+export const MAX_REFERENCIAS_DE_ESTILO = 12;
+
+/**
+ * A janela de referências desta peça.
+ *
+ * O provedor aceita quatro anexos e a foto do produto leva um, então sobram
+ * três por chamada. Girar a janela pelo índice da ideia faz a peça 1 ver as
+ * referências 0,1,2 e a peça 2 ver 3,4,5: mesma marca, climas diferentes.
+ * Sem isso a variedade de luz morria no primeiro trio.
+ */
+export function janelaDeEstilo(acervo: string[], ideia: number, quantas: number): string[] {
+  if (!acervo.length || quantas <= 0) return [];
+  const inicio = (ideia * quantas) % acervo.length;
+  const janela: string[] = [];
+  for (let i = 0; i < Math.min(quantas, acervo.length); i += 1) {
+    janela.push(acervo[(inicio + i) % acervo.length]);
+  }
+  return janela;
 }
 
 /** Sem formato escolhido, o vertical de feed é o que mais roda. */

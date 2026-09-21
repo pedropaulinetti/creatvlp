@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  planejarPecas, geracoesNecessarias, arquetipoDaPeca, ARQUETIPOS_EM_RODIZIO,
+  planejarPecas, geracoesNecessarias, arquetipoDaPeca, ARQUETIPOS_EM_RODIZIO, janelaDeEstilo,
 } from "../supabase/functions/_shared/pecas.ts";
 
 const caminhos = [
@@ -150,5 +150,37 @@ describe("arquetipoDaPeca", () => {
     // E ideias diferentes não caem no mesmo desenho.
     const porIdeia = [0, 1, 2].map((ideia) => plano.find((peca) => peca.ideia === ideia)!.arquetipo);
     expect(new Set(porIdeia).size).toBe(3);
+  });
+});
+
+/**
+ * A janela de referências de estilo.
+ *
+ * Era `.limit(3)` no banco, e como o provedor aceita quatro anexos com um já
+ * tomado pela foto do produto, cada peça via SEMPRE as mesmas três imagens. A
+ * leitura guardava até doze, a marca mantinha todas, e nove nunca entravam em
+ * nada: trinta peças de uma campanha nasciam do mesmo trio de luz e clima.
+ */
+describe("janelaDeEstilo", () => {
+  const acervo = ["a", "b", "c", "d", "e", "f", "g", "h", "i"];
+
+  it("peças diferentes veem referências diferentes", () => {
+    expect(janelaDeEstilo(acervo, 0, 3)).toEqual(["a", "b", "c"]);
+    expect(janelaDeEstilo(acervo, 1, 3)).toEqual(["d", "e", "f"]);
+    expect(janelaDeEstilo(acervo, 2, 3)).toEqual(["g", "h", "i"]);
+  });
+
+  it("volta ao início quando o acervo acaba", () => {
+    expect(janelaDeEstilo(acervo, 3, 3)).toEqual(janelaDeEstilo(acervo, 0, 3));
+  });
+
+  it("acervo menor que a janela não repete nem quebra", () => {
+    expect(janelaDeEstilo(["a", "b"], 0, 3)).toEqual(["a", "b"]);
+    expect(janelaDeEstilo(["a"], 5, 3)).toEqual(["a"]);
+  });
+
+  it("sem acervo, sem anexo", () => {
+    expect(janelaDeEstilo([], 0, 3)).toEqual([]);
+    expect(janelaDeEstilo(acervo, 0, 0)).toEqual([]);
   });
 });

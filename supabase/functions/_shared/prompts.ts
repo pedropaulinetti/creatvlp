@@ -206,9 +206,12 @@ que você decide é a arquitetura, que é o que separa um anúncio do outro.
 
 O arquétipo manda no tamanho da headline, e não o contrário:
 
-- "vitrine", "bloco", "destaque" e "manchete" desenham o título em caixa alta
-  ocupando quase metade da peça. Neles a headline tem que ser MANCHETE: no
-  máximo 50 caracteres, uma ideia só, sem dois-pontos e sem subordinada.
+- "bloco", "destaque" e "manchete" desenham o título em caixa alta ocupando
+  quase metade da peça. Neles a headline tem que ser MANCHETE: no máximo 50
+  caracteres, uma ideia só, sem dois-pontos e sem subordinada.
+- "vitrine" é mais apertada ainda, porque o produto ocupa metade do quadro e o
+  texto escreve numa coluna estreita: no máximo 32 caracteres. "Mais volume no
+  primeiro uso" cabe. "Tenha um cabelo com volume e força que te destaca" não.
   Boa: "Mais volume já no primeiro uso". Ruim: "Vá além do cuidado: deixe sua
   marca com um cabelo forte e um aroma inesquecível" — essa é longa demais e o
   desenho a encolhe até virar corpo de texto.

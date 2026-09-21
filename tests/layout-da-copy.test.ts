@@ -110,9 +110,17 @@ describe("manchete longa demais para cartaz", () => {
   });
 
   it("os asteriscos do destaque não contam, porque somem no desenho", () => {
-    const noLimite = "Mais volume de cabelo no primeiro uso do dia";
-    expect(noLimite.length).toBeLessThanOrEqual(LIMITE_DE_MANCHETE_DE_CARTAZ);
-    expect(arquetipoDaPeca("titulo", 0, "vitrine", `Mais *volume* de cabelo no primeiro uso do dia`)).toBe("vitrine");
+    /*
+     * Construída no limite: sem asteriscos ela cabe no bloco, com asteriscos
+     * passaria. Se os dois contassem, a peça mudaria de desenho por causa de
+     * dois caracteres que nem chegam a ser desenhados.
+     */
+    const limpa = "a".repeat(LIMITE_DE_MANCHETE_DE_CARTAZ - 3) + " bc";
+    const marcada = "a".repeat(LIMITE_DE_MANCHETE_DE_CARTAZ - 3) + " *bc*";
+
+    expect(limpa.length).toBeLessThanOrEqual(LIMITE_DE_MANCHETE_DE_CARTAZ);
+    expect(marcada.length).toBeGreaterThan(LIMITE_DE_MANCHETE_DE_CARTAZ);
+    expect(arquetipoDaPeca("titulo", 0, "bloco", marcada)).toBe("bloco");
   });
 
   it("desenho de corpo de leitura aguenta manchete longa", () => {
@@ -122,5 +130,31 @@ describe("manchete longa demais para cartaz", () => {
 
   it("enquete e conversa continuam mandando", () => {
     expect(arquetipoDaPeca("enquete", 0, "vitrine", LONGA)).toBe("enquete");
+  });
+});
+
+/**
+ * O teto da manchete não é o mesmo em todo desenho.
+ *
+ * Numa peça real, "Tenha um cabelo com volume e força que te destaca" tem 48
+ * caracteres, passou pelo limite único de 52, e na coluna de 39% da vitrine
+ * virou sete linhas empilhadas de duas palavras. Cabia, e estava errado.
+ */
+describe("teto de manchete por desenho", () => {
+  const QUARENTA_E_OITO = "Tenha um cabelo com volume e força que te destaca";
+  const CURTA = "Mais volume no primeiro uso";
+
+  it("a vitrine recusa a manchete que o bloco aceita", () => {
+    expect(QUARENTA_E_OITO.length).toBeLessThan(LIMITE_DE_MANCHETE_DE_CARTAZ);
+    expect(arquetipoDaPeca("titulo", 0, "vitrine", QUARENTA_E_OITO)).toBe("coluna");
+    expect(arquetipoDaPeca("titulo", 0, "bloco", QUARENTA_E_OITO)).toBe("bloco");
+  });
+
+  it("manchete curta continua cabendo na vitrine", () => {
+    expect(arquetipoDaPeca("titulo", 0, "vitrine", CURTA)).toBe("vitrine");
+  });
+
+  it("desenho de corpo de leitura não tem teto", () => {
+    expect(arquetipoDaPeca("titulo", 0, "listicle", QUARENTA_E_OITO)).toBe("listicle");
   });
 });
