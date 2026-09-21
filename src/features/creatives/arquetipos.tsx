@@ -668,79 +668,130 @@ export function Destaque({ palco }: { palco: Palco }) {
   );
 }
 
-/** Acima disso a contagem riscada vira mancha: o número ao lado basta. */
-const MAX_RISCOS = 15;
-
 // ------------------------------------------------------------------ enquete
 /**
- * Uma pergunta escrita à mão, com as respostas riscadas embaixo.
+ * Uma pergunta como anúncio, com as respostas em barras proporcionais.
  *
  * Não tem headline, nem subheadline, nem imagem: a pergunta é o anúncio.
  * É o formato que mais aparece nas referências e o que menos parecia possível
  * enquanto a copy só sabia produzir título e apoio.
  */
 export function Enquete({ palco }: { palco: Palco }) {
-  const { composition, px } = palco;
+  const { composition, px, layout } = palco;
   const opcoes = (composition.opcoes ?? []).slice(0, 3);
+  const totalDeVotos = opcoes.reduce((soma, opcao) => soma + Math.max(0, opcao.votos), 0);
   const maximo = Math.max(1, ...opcoes.map((opcao) => opcao.votos));
+  const { ink, surface, accent } = composition.palette;
 
   return (
     <>
-      <div style={{ position: "absolute", inset: 0, background: composition.palette.surface }} />
+      <div style={{ position: "absolute", inset: 0, background: surface }} />
       <Logo palco={palco} claro />
 
-      <div style={{ position: "absolute", inset: 0, padding: px(9), paddingTop: px(17), display: "flex", flexDirection: "column", gap: px(7) }}>
+      {/*
+        O bloco ocupa o quadro, em vez de se amontoar no topo.
+        
+        Antes: pergunta e respostas empilhadas em cima, metade de baixo vazia,
+        pílula sozinha lá embaixo. Numa peça real saiu com 50% do quadro em
+        branco. Enquete é pergunta grande e resposta grande, não um gráfico
+        pequeno num canto.
+      */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          padding: px(9),
+          paddingTop: px(17),
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          gap: px(6),
+        }}
+      >
         <div
           style={{
-            color: composition.palette.ink,
+            color: ink,
             fontFamily: pilhaDeFonte(composition.typography?.headline),
-            fontSize: px(7.6),
-            fontWeight: 600,
-            lineHeight: 1.15,
-            letterSpacing: "-0.02em",
+            fontSize: px(corpoDoTitulo(composition.pergunta || composition.headline, 10.5, 6.4, 82) * escalaDoTitulo(layout)),
+            fontWeight: 700,
+            lineHeight: 1.06,
+            letterSpacing: "-0.03em",
             textWrap: "balance",
           }}
         >
           {composition.pergunta || composition.headline}
         </div>
 
-        <div style={{ display: "flex", gap: px(4), alignItems: "flex-start" }}>
-          {opcoes.map((opcao, indice) => (
-            <div key={opcao.texto} style={{ flex: 1, display: "flex", flexDirection: "column", gap: px(2) }}>
-              <span style={{ color: composition.palette.ink, fontSize: px(3.4), lineHeight: 1.25 }}>{opcao.texto}</span>
-              <span aria-hidden style={{ height: px(0.4), background: composition.palette.ink, opacity: 0.35 }} />
+        {/*
+          Barras proporcionais, e não risquinhos empilhados.
+          
+          O risco em quatro-mais-um é bonito no papel e ilegível no feed: acima
+          de quinze vira mancha, e a comparação entre as três respostas, que é
+          o ponto inteiro de uma enquete, some. Barra preenchida em proporção
+          diz a mesma coisa de longe, e é o que o próprio prompt já descrevia.
+        */}
+        <div style={{ display: "flex", flexDirection: "column", gap: px(3.4) }}>
+          {opcoes.map((opcao) => {
+            const vencedora = opcao.votos === maximo;
+            const fracao = Math.max(0.08, opcao.votos / maximo);
+            const porcento = totalDeVotos ? Math.round((opcao.votos / totalDeVotos) * 100) : 0;
 
-              {/*
-                Contagem riscada: quatro barras e a quinta cortando, como no
-                papel. Acima de quinze o risco vira mancha ilegível, então o
-                desenho para e o número ao lado é que conta a história.
-              */}
-              <div style={{ display: "flex", flexWrap: "wrap", gap: px(0.9), alignItems: "flex-end", minHeight: px(7) }}>
-                {Array.from({ length: Math.min(opcao.votos, MAX_RISCOS) }).map((_, risco) => (
+            return (
+              <div key={opcao.texto} style={{ display: "flex", flexDirection: "column", gap: px(1.2) }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: px(2) }}>
                   <span
-                    key={risco}
-                    aria-hidden
                     style={{
-                      display: "block",
-                      width: px(0.55),
-                      height: px(5),
-                      background: indice === opcoes.findIndex((o) => o.votos === maximo)
-                        ? composition.palette.accent
-                        : composition.palette.ink,
-                      transform: (risco + 1) % 5 === 0 ? "rotate(72deg) translateX(-12%)" : "rotate(-4deg)",
-                      marginLeft: (risco + 1) % 5 === 0 ? px(-3.2) : 0,
+                      flex: 1,
+                      color: ink,
+                      fontSize: px(4.2),
+                      fontWeight: vencedora ? 600 : 400,
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    {opcao.texto}
+                  </span>
+                  {totalDeVotos > 0 && (
+                    <span
+                      style={{
+                        color: vencedora ? accent : ink,
+                        opacity: vencedora ? 1 : 0.55,
+                        fontFamily: pilhaDeFonte(composition.typography?.headline),
+                        fontSize: px(4.6),
+                        fontWeight: 700,
+                      }}
+                    >
+                      {porcento}%
+                    </span>
+                  )}
+                </div>
+
+                <div
+                  aria-hidden
+                  style={{
+                    height: px(3.4),
+                    borderRadius: px(1.7),
+                    background: vencedora ? `${accent}26` : `${ink}14`,
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: `${fracao * 100}%`,
+                      height: "100%",
+                      borderRadius: px(1.7),
+                      background: vencedora ? accent : ink,
+                      opacity: vencedora ? 1 : 0.28,
                     }}
                   />
-                ))}
+                </div>
               </div>
-              <span style={{ color: composition.palette.ink, opacity: 0.5, fontSize: px(2.7) }}>{opcao.votos}</span>
-            </div>
-          ))}
+            );
+          })}
         </div>
+      </div>
 
-        <div style={{ marginTop: "auto" }}>
-          <Pilula texto={composition.cta} palco={palco} cor={composition.palette.accent} corDoTexto="#FFFFFF" />
-        </div>
+      <div style={{ position: "absolute", left: px(9), bottom: px(9) }}>
+        <Pilula texto={composition.cta} palco={palco} cor={accent} corDoTexto={surface} />
       </div>
     </>
   );
@@ -762,7 +813,27 @@ export function Conversa({ palco }: { palco: Palco }) {
       <div style={{ position: "absolute", inset: 0, background: composition.palette.surface }} />
       <Logo palco={palco} claro />
 
-      <div style={{ position: "absolute", inset: 0, padding: px(7), paddingTop: px(17), display: "flex", flexDirection: "column", gap: px(2.4) }}>
+      {/*
+        Os balões ocupam o quadro em vez de se amontoarem no topo.
+        
+        Empilhados a partir de cima, três mensagens curtas deixavam metade da
+        peça em branco com a pílula sozinha lá embaixo. Conversa de anúncio é
+        print de tela cheia, e o corpo do balão é de aplicativo de mensagem,
+        não de legenda.
+      */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          padding: px(7),
+          paddingTop: px(17),
+          paddingBottom: px(20),
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          gap: px(3),
+        }}
+      >
         {mensagens.map((mensagem, indice) => {
           const daMarca = mensagem.de === "marca";
           return (
@@ -770,25 +841,25 @@ export function Conversa({ palco }: { palco: Palco }) {
               key={indice}
               style={{
                 alignSelf: daMarca ? "flex-end" : "flex-start",
-                maxWidth: "78%",
-                padding: `${px(2.6)}px ${px(3.2)}px`,
-                borderRadius: px(4),
-                borderBottomRightRadius: daMarca ? px(0.8) : px(4),
-                borderBottomLeftRadius: daMarca ? px(4) : px(0.8),
+                maxWidth: "82%",
+                padding: `${px(3.2)}px ${px(4)}px`,
+                borderRadius: px(5),
+                borderBottomRightRadius: daMarca ? px(1) : px(5),
+                borderBottomLeftRadius: daMarca ? px(5) : px(1),
                 background: daMarca ? composition.palette.accent : "rgba(0,0,0,0.06)",
                 color: daMarca ? "#FFFFFF" : composition.palette.ink,
-                fontSize: px(3.5),
-                lineHeight: 1.35,
+                fontSize: px(4.4),
+                lineHeight: 1.32,
               }}
             >
               {mensagem.texto}
             </div>
           );
         })}
+      </div>
 
-        <div style={{ marginTop: "auto" }}>
-          <Pilula texto={composition.cta} palco={palco} cor={composition.palette.ink} corDoTexto="#FFFFFF" />
-        </div>
+      <div style={{ position: "absolute", left: px(7), bottom: px(7) }}>
+        <Pilula texto={composition.cta} palco={palco} cor={composition.palette.ink} corDoTexto={composition.palette.surface} />
       </div>
     </>
   );
