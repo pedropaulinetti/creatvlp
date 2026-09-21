@@ -314,6 +314,19 @@ export function imagePrompt(
   const ratio = format === "9:16" ? "vertical 9:16" : format === "1:1" ? "quadrado 1:1" : "vertical 4:5";
   return [
     `Fotografia publicitária ${ratio} para a marca ${brand.name}${brand.segment ? ` (${brand.segment})` : ""}.`,
+    /*
+     * O enquadramento vem PRIMEIRO, e no imperativo.
+     *
+     * Estava no meio da lista, depois da cena, e o modelo simplesmente não
+     * obedecia: medido com a foto real de um produto, Gemini 3.1 Flash, Flash
+     * Lite e 3 Pro os três fizeram cena centralizada quando a vitrine pedia o
+     * produto à direita com a esquerda limpa. Só o GPT-5.4 obedeceu, e ele
+     * custa 3,6 vezes mais e leva 124 segundos contra um teto de 150.
+     *
+     * Movendo esta linha para o topo, o Flash passou a obedecer, em 12
+     * segundos. Era o prompt, não o modelo.
+     */
+    `ENQUADRAMENTO, antes de tudo: ${ESPACO_NEGATIVO[referencias.arquetipo ?? ""] ?? ESPACO_NEGATIVO.coluna}`,
     visualPrompt,
     referencias.produto
       ? "A primeira imagem de referência é o produto real desta marca: reproduza-o com fidelidade — mesma forma, mesma cor, mesmos detalhes de acabamento — como objeto principal da cena. Não invente outro produto nem altere a embalagem."
@@ -322,14 +335,15 @@ export function imagePrompt(
       ? "As demais imagens de referência mostram como esta marca se fotografa: siga a mesma direção de luz, paleta e clima. Não as copie nem reproduza pessoas que apareçam nelas."
       : "",
     /*
-     * A mesma fotografia vira três peças, com o texto em lugares diferentes.
-     * Sem pedir enquadramento tolerante, um layout encaixa e os outros dois
-     * cortam o produto ou jogam a headline em cima do assunto.
+     * A linha de "enquadramento tolerante a recorte" saiu daqui.
+     *
+     * Ela existia de quando uma fotografia servia três peças com o texto em
+     * lugares diferentes, e por isso pedia o assunto centralizado com folga em
+     * volta. Hoje cada formato de cada peça é uma geração própria, com um
+     * arquétipo só, então ela não protegia mais nada — e brigava de frente com
+     * o enquadramento que o arquétipo pede, que é o que o modelo obedecia
+     * menos justamente por vir contradito logo antes.
      */
-    "Enquadramento tolerante a recorte: o assunto centralizado e inteiro, com folga limpa em cima e embaixo, e nada essencial nos 15% das bordas. A mesma fotografia vai ser usada com o texto no rodapé, no topo e recortada em quadrado.",
-    // Pedir "área limpa" faz o modelo pintar um bloco chapado com borda dura.
-    // O que se quer é espaço negativo dentro da própria cena.
-    ESPACO_NEGATIVO[referencias.arquetipo ?? ""] ?? ESPACO_NEGATIVO.coluna,
     "A fotografia preenche o quadro inteiro, de borda a borda, sem faixas, molduras, bordas brancas ou blocos de cor chapada.",
     "Iluminação natural, cores fiéis, acabamento editorial, alta nitidez.",
     /*

@@ -431,3 +431,39 @@ describe("rótulo da embalagem", () => {
     expect(prompt).toContain("rótulo da embalagem precisa aparecer inteiro");
   });
 });
+
+/**
+ * O enquadramento precisa vir antes da cena.
+ *
+ * Estava no meio da lista e o modelo não obedecia: medido com foto real de
+ * produto, Gemini 3.1 Flash, Flash Lite e 3 Pro fizeram cena centralizada
+ * quando a vitrine pedia o produto à direita com a esquerda limpa. Movendo a
+ * linha para o topo, o mesmo Flash passou a obedecer.
+ */
+describe("ordem do enquadramento", () => {
+  const marca = { name: "Noway", segment: "Bebidas" } as Parameters<typeof imagePrompt>[1];
+
+  it("o enquadramento aparece antes da cena", () => {
+    const cena = "uma lata sobre bancada de pedra com folhagem ao fundo";
+    const prompt = imagePrompt(cena, marca, "4:5", { produto: true, estilo: 0, arquetipo: "vitrine" });
+
+    expect(prompt.indexOf("ENQUADRAMENTO, antes de tudo")).toBeLessThan(prompt.indexOf(cena));
+  });
+
+  it("não sobra a instrução velha, que pedia o assunto centralizado", () => {
+    const prompt = imagePrompt("cena", marca, "4:5", { produto: true, estilo: 0, arquetipo: "vitrine" });
+    expect(prompt).not.toContain("Enquadramento tolerante a recorte");
+    expect(prompt).not.toContain("assunto centralizado");
+  });
+
+  it("cada arquétipo leva o seu enquadramento para o topo", () => {
+    for (const [arquetipo, trecho] of [
+      ["vitrine", "deslocado para a direita"],
+      ["numeros", "metade direita"],
+      ["coluna", "metade de baixo"],
+    ] as const) {
+      const prompt = imagePrompt("cena", marca, "4:5", { produto: true, estilo: 0, arquetipo });
+      expect(prompt.slice(0, 400), arquetipo).toContain(trecho);
+    }
+  });
+});
