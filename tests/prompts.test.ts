@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  brandContext, chatSystemPrompt, directionsPrompt, imagePrompt, nextTestPrompt, pecaCompletaPrompt,
+  brandContext, chatSystemPrompt, copiesPrompt, directionsPrompt, imagePrompt, nextTestPrompt,
+  pecaCompletaPrompt,
 } from "../supabase/functions/_shared/prompts.ts";
 
 const brand = {
@@ -465,5 +466,33 @@ describe("ordem do enquadramento", () => {
       const prompt = imagePrompt("cena", marca, "4:5", { produto: true, estilo: 0, arquetipo });
       expect(prompt.slice(0, 400), arquetipo).toContain(trecho);
     }
+  });
+});
+
+/**
+ * Enquete e conversa em toda campanha de toda marca.
+ *
+ * O prompt mandava escrever uma de cada, nessa ordem, para todo caminho
+ * criativo. Com três caminhos, toda campanha saía com três enquetes e três
+ * conversas, sempre, em qualquer conta. Variedade imposta vira repetição.
+ */
+describe("formatos de copy não são obrigatórios", () => {
+  // Reaproveita o briefing que os demais testes deste arquivo já usam.
+  const direction = { title: "t", hook: "h", promise: "p", cta: "c", visual_prompt: "v" };
+  const prompt = copiesPrompt("contexto", brief, direction, 3);
+
+  it("diz explicitamente que enquete e conversa são opcionais", () => {
+    expect(prompt).toContain("NÃO são obrigatórias");
+  });
+
+  it("não manda mais uma de cada, nessa ordem", () => {
+    expect(prompt).not.toContain("Cada variação nasce para um formato diferente, nesta ordem");
+  });
+
+  it("dá o critério de quando cada forma cabe, e o padrão na dúvida", () => {
+    expect(prompt).toContain("só quando o ângulo for mesmo uma dúvida");
+    // A frase quebra linha no meio; o critério é o que importa, não a quebra.
+    expect(prompt).toContain("objeção real para alguém levantar");
+    expect(prompt).toContain('Na dúvida, "titulo"');
   });
 });

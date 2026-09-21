@@ -163,19 +163,30 @@ export function copiesPrompt(context: string, brief: Brief, direction: Record<st
 
 Sua tarefa: escrever ${count} variações de copy para o caminho criativo abaixo, mantendo o mesmo ângulo e mudando **a forma do anúncio**, não só as palavras.
 
-Cada variação nasce para um formato diferente, nesta ordem:
-1. "titulo" — o anúncio clássico: título, apoio e botão.
-2. "enquete" — uma pergunta escrita à mão num quadro, com 3 respostas e quantas
-   pessoas marcaram cada uma. NÃO tem título nem apoio: a pergunta é o anúncio.
-   Preencha "pergunta" (até 120 caracteres) e "opcoes" — cada resposta com até
-   40 caracteres e "votos" plausíveis, somando poucas dezenas —, e deixe
-   headline e subheadline vazias.
-3. "conversa" — um print de mensagens entre um cliente e a marca, 3 a 4 balões,
-   como gente escreve mesmo. NÃO tem título nem apoio. Preencha "mensagens" —
-   cada balão com até 140 caracteres, que é o que cabe na tela —, e deixe
-   headline e subheadline vazias.
+Cada variação muda a FORMA do anúncio. Os formatos disponíveis:
 
-Se ${count} for menor que 3, use os formatos nesta ordem a partir do primeiro.
+- "titulo" — o anúncio clássico: título, apoio e botão. É a forma padrão e a
+  que serve a quase todo ângulo.
+- "enquete" — uma pergunta com 3 respostas e quantas pessoas marcaram cada
+  uma. NÃO tem título nem apoio: a pergunta é o anúncio. Preencha "pergunta"
+  (até 120 caracteres) e "opcoes" — cada resposta com até 40 caracteres e
+  "votos" plausíveis, somando poucas dezenas —, e deixe headline e subheadline
+  vazias.
+- "conversa" — um print de mensagens entre um cliente e a marca, 3 a 4 balões,
+  como gente escreve mesmo. NÃO tem título nem apoio. Preencha "mensagens" —
+  cada balão com até 140 caracteres —, e deixe headline e subheadline vazias.
+
+IMPORTANTE: enquete e conversa NÃO são obrigatórias. Elas eram produzidas uma
+de cada, sempre, para todo caminho, e o resultado é que toda campanha de toda
+marca saía com a mesma enquete e a mesma conversa. Isso cansa e entrega menos.
+
+Use "enquete" só quando o ângulo for mesmo uma dúvida que o público tem, com
+respostas que ele reconheceria como suas. Use "conversa" só quando houver uma
+objeção real para alguém levantar e a marca responder. Se não houver, escreva
+"titulo" e faça um anúncio melhor.
+
+Na dúvida, "titulo". Das ${count} variações, o normal é que a maioria seja
+"titulo"; uma forma diferente entra quando ela diz algo que o título não diria.
 
 Cada copy também escolhe a ESTRUTURA da peça, no campo "layout". Você não
 desenha nada: o CreatvOS desenha, e por isso a ortografia nunca sai errada. O

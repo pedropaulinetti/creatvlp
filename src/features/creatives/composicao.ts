@@ -55,6 +55,36 @@ export function emptyComposition(format: Format = "4:5"): Composition {
   };
 }
 
+/**
+ * A luminância relativa de uma cor, pela fórmula da WCAG.
+ *
+ * O prompt do servidor já usava isso para dizer ao modelo qual das cores da
+ * marca é a clara. O canvas não usava, e por isso pintava texto branco em
+ * cima de qualquer acento: numa marca de verde-limão ou amarelo, o botão
+ * ficava ilegível. Medido em duas contas antes de virar conserto.
+ */
+export function luminancia(hex: string): number {
+  const limpo = hex.replace("#", "");
+  if (limpo.length !== 6) return 0;
+  const canal = (inicio: number) => {
+    const valor = Number.parseInt(limpo.slice(inicio, inicio + 2), 16) / 255;
+    if (Number.isNaN(valor)) return 0;
+    return valor <= 0.03928 ? valor / 12.92 : ((valor + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * canal(0) + 0.7152 * canal(2) + 0.0722 * canal(4);
+}
+
+/**
+ * A cor de texto que se lê sobre um fundo.
+ *
+ * Não é escolha de gosto: é a diferença entre o CTA ser lido e não ser. O
+ * limiar de 0.5 é o mesmo que a WCAG usa, e as duas saídas vêm da paleta da
+ * própria marca, para o botão continuar parecendo dela.
+ */
+export function sobre(fundo: string, claro: string, escuro: string): string {
+  return luminancia(fundo) > 0.5 ? escuro : claro;
+}
+
 export function scrimGradient(kind: string, strength: number): string {
   const alpha = Math.min(0.85, Math.max(0, strength));
   switch (kind) {

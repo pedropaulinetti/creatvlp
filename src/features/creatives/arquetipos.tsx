@@ -1,5 +1,5 @@
 import * as React from "react";
-import { comDestaque, pilhaDeFonte, scrimGradient, type Palco } from "./composicao";
+import { comDestaque, pilhaDeFonte, scrimGradient, sobre, type Palco } from "./composicao";
 
 /*
  * Os arquétipos.
@@ -59,6 +59,17 @@ export function Logo({ palco, claro }: { palco: Palco; claro: boolean }) {
 }
 
 /** Botão em pílula, com seta — o formato que aparece em quase toda referência. */
+/**
+ * O botão da peça.
+ *
+ * A cor do texto sai da luminância do fundo, e não de quem chamou. Estava
+ * cravada em branco em cinco dos oito arquétipos: numa marca de verde-limão
+ * ou amarelo, o CTA saía branco sobre claro e não se lia. Apareceu em duas
+ * contas diferentes antes de virar conserto.
+ *
+ * As duas saídas são cores da própria marca, para o botão continuar parecendo
+ * dela em vez de ganhar um preto ou branco de fora.
+ */
 function Pilula({
   texto,
   palco,
@@ -69,11 +80,13 @@ function Pilula({
   texto: string;
   palco: Palco;
   cor: string;
-  corDoTexto: string;
+  /** Ausente, sai do contraste com o fundo, que é o caso comum. */
+  corDoTexto?: string;
   tamanho?: number;
 }) {
-  const { px } = palco;
+  const { px, composition } = palco;
   if (!texto) return null;
+  const tinta = corDoTexto ?? sobre(cor, composition.palette.surface, composition.palette.ink);
   return (
     <div
       style={{
@@ -84,7 +97,7 @@ function Pilula({
         padding: `${px(2.4)}px ${px(4.6)}px`,
         borderRadius: px(9),
         background: cor,
-        color: corDoTexto,
+        color: tinta,
         fontSize: px(tamanho),
         fontWeight: 600,
         lineHeight: 1.2,
@@ -327,7 +340,11 @@ export function Coluna({ palco }: { palco: Palco }) {
               borderRadius: px(1.2),
               background: layout.cta?.style === "solid" ? composition.palette.accent : "transparent",
               border: layout.cta?.style === "outline" ? `${px(0.28)}px solid ${corDoTexto}` : "none",
-              color: layout.cta?.style === "solid" ? "#FFFFFF" : corDoTexto,
+              // Sólido: a tinta sai do contraste com o acento, não de branco fixo.
+              color:
+                layout.cta?.style === "solid"
+                  ? sobre(composition.palette.accent, composition.palette.surface, composition.palette.ink)
+                  : corDoTexto,
               fontSize: px(3.3),
               fontWeight: 500,
               lineHeight: 1.2,
@@ -414,7 +431,7 @@ export function Bloco({ palco }: { palco: Palco }) {
               <Fundo imageUrl={imageUrl} />
             </div>
           )}
-          <Pilula texto={composition.cta} palco={palco} cor={composition.palette.accent} corDoTexto="#FFFFFF" />
+          <Pilula texto={composition.cta} palco={palco} cor={composition.palette.accent} />
         </div>
       </div>
     </>
@@ -477,7 +494,7 @@ export function Listicle({ palco }: { palco: Palco }) {
         </div>
 
         <div style={{ marginTop: "auto" }}>
-          <Pilula texto={composition.cta} palco={palco} cor={composition.palette.accent} corDoTexto="#FFFFFF" />
+          <Pilula texto={composition.cta} palco={palco} cor={composition.palette.accent} />
         </div>
       </div>
     </>
@@ -534,7 +551,7 @@ export function Manchete({ palco }: { palco: Palco }) {
               {composition.body}
             </div>
           )}
-          <Pilula texto={composition.cta} palco={palco} cor={composition.palette.ink} corDoTexto="#FFFFFF" tamanho={3} />
+          <Pilula texto={composition.cta} palco={palco} cor={composition.palette.ink} tamanho={3} />
         </div>
       </div>
     </>
@@ -603,7 +620,7 @@ export function Numeros({ palco }: { palco: Palco }) {
         </div>
 
         <div style={{ padding: px(7), paddingTop: px(4) }}>
-          <Pilula texto={composition.cta} palco={palco} cor={composition.palette.accent} corDoTexto="#FFFFFF" />
+          <Pilula texto={composition.cta} palco={palco} cor={composition.palette.accent} />
         </div>
       </div>
     </>
@@ -661,7 +678,7 @@ export function Destaque({ palco }: { palco: Palco }) {
           </div>
         )}
         <div style={{ display: "flex", justifyContent: "center", width: "100%" }}>
-          <Pilula texto={composition.cta} palco={palco} cor={composition.palette.accent} corDoTexto="#FFFFFF" />
+          <Pilula texto={composition.cta} palco={palco} cor={composition.palette.accent} />
         </div>
       </div>
     </>
@@ -791,7 +808,7 @@ export function Enquete({ palco }: { palco: Palco }) {
       </div>
 
       <div style={{ position: "absolute", left: px(9), bottom: px(9) }}>
-        <Pilula texto={composition.cta} palco={palco} cor={accent} corDoTexto={surface} />
+        <Pilula texto={composition.cta} palco={palco} cor={accent} />
       </div>
     </>
   );
@@ -859,7 +876,7 @@ export function Conversa({ palco }: { palco: Palco }) {
       </div>
 
       <div style={{ position: "absolute", left: px(7), bottom: px(7) }}>
-        <Pilula texto={composition.cta} palco={palco} cor={composition.palette.ink} corDoTexto={composition.palette.surface} />
+        <Pilula texto={composition.cta} palco={palco} cor={composition.palette.ink} />
       </div>
     </>
   );
@@ -977,7 +994,7 @@ export function Vitrine({ palco }: { palco: Palco }) {
       </div>
 
       <div style={{ position: "absolute", left: px(7), bottom: px(7) }}>
-        <Pilula texto={composition.cta} palco={palco} cor={ink} corDoTexto={surface} tamanho={4.4} />
+        <Pilula texto={composition.cta} palco={palco} cor={ink} tamanho={4.4} />
       </div>
     </>
   );
