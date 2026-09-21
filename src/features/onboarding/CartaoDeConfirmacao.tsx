@@ -192,6 +192,21 @@ function Identidade({
     draft.fontFiles.filter((fonte) => !fonte.url).map((fonte) => fonte.path),
   );
 
+  /*
+   * A prévia mostra o logo GUARDADO, não o que a leitura achou no site.
+   *
+   * Mostrava `leitura.logoUrl` sempre. Quem clicava em "Trocar logo" e
+   * escolhia um arquivo via a mesma imagem de antes: o upload acontecia, o
+   * caminho ia para o rascunho, e a tela não mudava nada. Indistinguível de
+   * não funcionar, e convidava a enviar de novo achando que tinha falhado.
+   *
+   * `logoPath` é o que foi guardado, venha da leitura ou do envio à mão. O
+   * endereço do site fica de prévia imediata, para o instante entre achar e
+   * guardar, e para quando a assinatura falha.
+   */
+  const urlDoLogo = useSignedUrls("brand-assets", [draft.logoPath]);
+  const logoVisivel = urlDoLogo.data?.get(draft.logoPath ?? "") ?? leitura.logoUrl;
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
@@ -270,7 +285,7 @@ function Identidade({
         <MonoLabel>Logo</MonoLabel>
         <div className="flex flex-wrap items-center gap-3">
           {(draft.logoPath || leitura.logoUrl) && (
-            <Logo url={leitura.logoUrl} guardada={Boolean(draft.logoPath)} />
+            <Logo url={logoVisivel} guardada={Boolean(draft.logoPath)} />
           )}
           {/*
             O envio aparece sempre, e não só quando a leitura falha: quando ela
