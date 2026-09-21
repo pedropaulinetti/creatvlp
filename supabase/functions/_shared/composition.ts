@@ -122,6 +122,20 @@ export async function buildComposition(
 export function composicaoDaPeca(params: {
   templateKey: string;
   format: string;
+  /**
+   * O desenho da peça, decidido em `planejarPecas`.
+   *
+   * Ia vazio até aqui: `layout: {}` fazia o canvas cair no `DEFAULT_LAYOUT` e
+   * toda peça sair em coluna, por mais que oito arquétipos existissem.
+   */
+  arquetipo?: string;
+  /**
+   * As demais escolhas de quem escreveu: escala do título, alinhamento e onde
+   * o texto pousa. Vão junto do arquétipo no `layout`, e o canvas lê de lá.
+   */
+  escala?: string;
+  alinhamento?: string;
+  ancora?: string;
   headline: string;
   subheadline?: string;
   body?: string;
@@ -149,7 +163,14 @@ export function composicaoDaPeca(params: {
     show_logo: true,
     palette: paletteFromBrand(params.brandColors),
     typography: typographyFromBrand(params.brandTypography),
-    layout: {},
+    layout: params.arquetipo
+      ? {
+          arquetipo: params.arquetipo,
+          escala: params.escala ?? "equilibrada",
+          alinhamento: params.alinhamento ?? "esquerda",
+          ancora: params.ancora ?? "rodape",
+        }
+      : {},
     scrim: 0.45,
   };
 }

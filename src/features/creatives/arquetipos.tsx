@@ -64,7 +64,7 @@ function Pilula({
   palco,
   cor,
   corDoTexto,
-  tamanho = 3.3,
+  tamanho = 4.1,
 }: {
   texto: string;
   palco: Palco;
@@ -81,7 +81,7 @@ function Pilula({
         alignItems: "center",
         gap: px(1.2),
         alignSelf: "flex-start",
-        padding: `${px(1.7)}px ${px(3.6)}px`,
+        padding: `${px(2.4)}px ${px(4.6)}px`,
         borderRadius: px(9),
         background: cor,
         color: corDoTexto,
@@ -98,14 +98,156 @@ function Pilula({
 
 // ------------------------------------------------------------------- coluna
 /** O clássico: fotografia inteira, texto ancorado num canto. */
+/**
+ * A lista de argumentos, com caixa de seleção.
+ *
+ * Era um "✓" de 3,4% de largura colado no texto, que no feed vira ruído
+ * cinza. Nos anúncios que funcionam a lista é um bloco legível de longe: caixa
+ * desenhada, item em duas linhas quando precisa, corpo perto do tamanho do
+ * apoio. É o segundo lugar onde o olho pousa, depois do título.
+ */
+/**
+ * A largura média de uma letra em caixa alta, em relação ao corpo.
+ *
+ * Medida na Inter em peso 800, que é o que o título usa. Serve de estimativa
+ * para caber a palavra na coluna sem medir o texto no DOM, que só existiria
+ * depois de pintar e obrigaria a repintar.
+ */
+const LARGURA_DA_LETRA = 0.62;
+
+/**
+ * O corpo do título, pelo texto E pela coluna onde ele cabe.
+ *
+ * Duas coisas limitam, e as duas precisam valer ao mesmo tempo.
+ *
+ * O comprimento total: "Mais volume" em 11% enche o quadro com graça, e a
+ * frase inteira no mesmo corpo vira seis linhas que engolem a lista e o botão.
+ *
+ * E a maior palavra, que é a que estava cortando. Palavra não quebra: numa
+ * coluna estreita, "TRATAMENTO" em corpo grande simplesmente sai pela direita
+ * e o `overflow: hidden` come as últimas letras. Medido numa peça real, saiu
+ * "TRATAMEN" e "COMPLET". Quem manda é a mais restritiva das duas.
+ */
+export function corpoDoTitulo(
+  texto: string,
+  teto: number,
+  piso: number,
+  /** Largura útil da coluna, na mesma unidade do corpo: % da peça. */
+  larguraDaColuna?: number,
+): number {
+  const limpo = texto.trim();
+  const letras = limpo.length;
+  const peloComprimento =
+    letras <= 22 ? teto : letras >= 78 ? piso : teto - ((letras - 22) / 56) * (teto - piso);
+
+  if (!larguraDaColuna) return peloComprimento;
+
+  const maiorPalavra = limpo
+    .split(/\s+/)
+    .reduce((maior, palavra) => Math.max(maior, palavra.length), 0);
+  if (!maiorPalavra) return peloComprimento;
+
+  // 0,96 de folga: a estimativa erra por pouco, e errar para dentro é barato.
+  const pelaPalavra = (larguraDaColuna * 0.96) / (maiorPalavra * LARGURA_DA_LETRA);
+
+  // O piso absoluto evita que uma palavra gigante reduza o título a nada.
+  return Math.max(3.6, Math.min(peloComprimento, pelaPalavra));
+}
+
+/**
+ * As três alavancas que a copy entrega junto do arquétipo.
+ *
+ * Escala, alinhamento e âncora não são enfeite: são a diferença entre a peça
+ * repetir o mesmo desenho com outro texto e a estrutura acompanhar o
+ * argumento. Quem escreveu "Qual seu maior desafio?" pediu título discreto;
+ * quem escreveu "13% mais volume" pediu dominante.
+ *
+ * O vocabulário é fechado e valor desconhecido cai no padrão, então nenhuma
+ * escolha do modelo consegue quebrar o desenho.
+ */
+const FATOR_DA_ESCALA: Record<string, number> = {
+  dominante: 1.32,
+  equilibrada: 1,
+  discreta: 0.76,
+};
+
+export function escalaDoTitulo(layout: Record<string, unknown>): number {
+  return FATOR_DA_ESCALA[String(layout.escala ?? "")] ?? 1;
+}
+
+export function alinhamentoDoTexto(layout: Record<string, unknown>): "left" | "center" {
+  return layout.alinhamento === "centro" ? "center" : "left";
+}
+
+/** Verdadeiro quando o texto pousa no topo em vez do rodapé. */
+export function ancoraNoTopo(layout: Record<string, unknown>): boolean {
+  return layout.ancora === "topo";
+}
+
+export function Checklist({
+  itens,
+  palco,
+  cor,
+  corDaCaixa,
+  tamanho = 4.2,
+}: {
+  itens: string[];
+  palco: Palco;
+  cor: string;
+  corDaCaixa?: string;
+  tamanho?: number;
+}) {
+  const { px } = palco;
+  if (!itens.length) return null;
+  const lado = px(tamanho * 1.15);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: px(tamanho * 0.62) }}>
+      {itens.map((item) => (
+        <div key={item} style={{ display: "flex", alignItems: "flex-start", gap: px(tamanho * 0.62) }}>
+          <span
+            aria-hidden
+            style={{
+              flexShrink: 0,
+              width: lado,
+              height: lado,
+              marginTop: px(tamanho * 0.16),
+              borderRadius: px(0.9),
+              border: `${Math.max(1, px(0.35))}px solid ${corDaCaixa ?? cor}`,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: corDaCaixa ?? cor,
+              fontSize: lado * 0.78,
+              lineHeight: 1,
+            }}
+          >
+            ✓
+          </span>
+          <span style={{ color: cor, fontSize: px(tamanho), lineHeight: 1.22, textWrap: "balance" }}>
+            {item}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function Coluna({ palco }: { palco: Palco }) {
   const { composition, layout, px, imageUrl } = palco;
   const claro = layout.scrim === "none";
   const corDoTexto = claro ? composition.palette.ink : "#FFFFFF";
-  const y = Number(layout.headline?.y ?? 62);
   const margem = px(8);
-  const ancora = y < 35 ? { top: margem } : y > 55 ? { bottom: margem } : { top: "50%", transform: "translateY(-50%)" };
-  const alinhamento = (layout.headline?.align ?? "left") as "left" | "center" | "right";
+  /*
+   * A âncora e o alinhamento saem da escolha da copy, com o `y` antigo de
+   * reserva: peça gerada antes de 21/09 não tem `ancora` no layout e precisa
+   * continuar desenhando onde desenhava.
+   */
+  const noTopo = layout.ancora ? ancoraNoTopo(layout) : Number(layout.headline?.y ?? 62) < 35;
+  const ancora = noTopo ? { top: margem } : { bottom: margem };
+  const alinhamento = layout.alinhamento
+    ? alinhamentoDoTexto(layout)
+    : ((layout.headline?.align ?? "left") as "left" | "center" | "right");
 
   return (
     <>
@@ -140,7 +282,7 @@ export function Coluna({ palco }: { palco: Palco }) {
             style={{
               color: corDoTexto,
               fontFamily: pilhaDeFonte(composition.typography?.headline),
-              fontSize: px(layout.headline?.size ?? 7.5),
+              fontSize: px((layout.headline?.size ?? 7.5) * escalaDoTitulo(layout)),
               fontWeight: layout.headline?.weight ?? 600,
               lineHeight: 1.08,
               letterSpacing: "-0.03em",
@@ -234,7 +376,7 @@ export function Bloco({ palco }: { palco: Palco }) {
           style={{
             color: corDoTexto,
             fontFamily: pilhaDeFonte(composition.typography?.headline),
-            fontSize: px(10),
+            fontSize: px(10 * escalaDoTitulo(palco.layout)),
             fontWeight: 800,
             lineHeight: 0.98,
             letterSpacing: "-0.04em",
@@ -245,16 +387,7 @@ export function Bloco({ palco }: { palco: Palco }) {
           {comDestaque(composition.headline, composition.palette.accent)}
         </div>
 
-        {itens.length > 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: px(1.2) }}>
-            {itens.map((item) => (
-              <div key={item} style={{ display: "flex", alignItems: "baseline", gap: px(1.4), color: corDoTexto, opacity: 0.9, fontSize: px(3.4) }}>
-                <span aria-hidden style={{ color: composition.palette.accent }}>✓</span>
-                {item}
-              </div>
-            ))}
-          </div>
-        )}
+        <Checklist itens={itens} palco={palco} cor={corDoTexto} corDaCaixa={composition.palette.accent} />
 
         {composition.price && (
           <div
@@ -271,9 +404,13 @@ export function Bloco({ palco }: { palco: Palco }) {
           </div>
         )}
 
-        <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: px(3) }}>
+        {/*
+          A foto absorve o que sobrar, em vez de reservar 38% fixos. Com a
+          lista maior, a altura fixa empurrava a pílula para fora do quadro.
+        */}
+        <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: px(3), flex: 1, minHeight: 0 }}>
           {imageUrl && (
-            <div style={{ height: px(38), borderRadius: px(3), overflow: "hidden" }}>
+            <div style={{ flex: 1, minHeight: px(16), borderRadius: px(3), overflow: "hidden" }}>
               <Fundo imageUrl={imageUrl} />
             </div>
           )}
@@ -658,8 +795,126 @@ export function Conversa({ palco }: { palco: Palco }) {
 }
 
 /** Qual arquétipo desenha esta composição. */
+// ------------------------------------------------------------------ vitrine
+/**
+ * Coluna de texto à esquerda, produto sangrando pela direita.
+ *
+ * É a estrutura do anúncio de performance que mais roda em stories: título
+ * gigante ocupando quase metade da altura, lista de argumentos com caixa de
+ * seleção, botão largo no rodapé, e o produto grande, cortado pela borda, sem
+ * cena nenhuma em volta.
+ *
+ * Faltava justamente ela. Os oito arquétipos anteriores punham a fotografia
+ * como fundo ou dentro de uma caixinha, e caixinha de foto é cara de post, não
+ * de anúncio. Aqui o produto é elemento de layout: ele invade o quadro.
+ */
+/** 53% de coluna menos 7% de recuo de cada lado. */
+const LARGURA_UTIL_DA_VITRINE = 53 - 7 * 2;
+
+export function Vitrine({ palco }: { palco: Palco }) {
+  const { composition, px, imageUrl } = palco;
+  const { ink, surface, accent } = composition.palette;
+  const alto = composition.format === "9:16";
+  // O 9:16 tem altura de sobra; o 4:5 não: um item a menos evita o corte.
+  const itens = (composition.bullets ?? []).slice(0, alto ? 4 : 3);
+  /*
+   * O teto do título é maior no vertical alto pelo mesmo motivo do vão: o
+   * corpo é medido em % da largura, e no 9:16 a peça é quase o dobro de alta.
+   * O mesmo 11% que enche o 4:5 deixa o 9:16 com cara de post pequeno.
+   */
+  const teto = (alto ? 14 : 11) * escalaDoTitulo(palco.layout);
+
+  return (
+    <>
+      {/* Fundo liso com uma sombra suave: o produto precisa de ar, não de cena. */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: `linear-gradient(160deg, ${surface} 0%, ${surface} 55%, rgba(0,0,0,0.05) 100%)`,
+        }}
+      />
+
+      {/*
+        O produto sangra pela direita e desce até a base. Cortar de propósito é
+        o que dá escala: produto inteiro e centrado lê como foto de catálogo.
+      */}
+      {imageUrl && (
+        <div
+          style={{
+            position: "absolute",
+            right: px(-8),
+            top: px(8),
+            width: "52%",
+            height: "84%",
+          }}
+        >
+          <img
+            src={imageUrl}
+            alt=""
+            crossOrigin="anonymous"
+            style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "left center" }}
+          />
+        </div>
+      )}
+
+      <Logo palco={palco} claro />
+
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          padding: px(7),
+          paddingTop: px(11),
+          /*
+           * O botão fica preso no rodapé, e a coluna reserva o espaço dele.
+           * Empilhado em fluxo, ele era o primeiro a sair do quadro quando o
+           * título vinha longo: a peça perdia justamente a chamada para ação.
+           */
+          paddingBottom: px(19),
+          display: "flex",
+          flexDirection: "column",
+          /*
+           * Bloco centrado no que sobra entre o topo e o botão.
+           *
+           * Empilhado a partir do topo, o 9:16 ficava com o texto agarrado em
+           * cima e um vão vazio de um terço da peça até a pílula: `px()` é
+           * porcentagem da LARGURA, e no vertical alto a altura sobra muito.
+           */
+          justifyContent: "center",
+          gap: px(3.5),
+          // A coluna para antes do produto: texto por cima da embalagem não lê.
+          width: "53%",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            color: ink,
+            fontFamily: pilhaDeFonte(composition.typography?.headline),
+            fontSize: px(corpoDoTitulo(composition.headline, teto, 6.2, LARGURA_UTIL_DA_VITRINE)),
+            fontWeight: 800,
+            lineHeight: 0.94,
+            letterSpacing: "-0.03em",
+            textTransform: "uppercase",
+          }}
+        >
+          {comDestaque(composition.headline, accent)}
+        </div>
+
+        <Checklist itens={itens} palco={palco} cor={ink} tamanho={itens.length > 2 ? 3.4 : 4.2} />
+      </div>
+
+      <div style={{ position: "absolute", left: px(7), bottom: px(7) }}>
+        <Pilula texto={composition.cta} palco={palco} cor={ink} corDoTexto={surface} tamanho={4.4} />
+      </div>
+    </>
+  );
+}
+
 export const ARQUETIPOS: Record<string, (props: { palco: Palco }) => React.JSX.Element> = {
   coluna: Coluna,
+  vitrine: Vitrine,
   bloco: Bloco,
   listicle: Listicle,
   manchete: Manchete,

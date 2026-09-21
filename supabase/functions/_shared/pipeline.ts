@@ -164,6 +164,8 @@ export async function runDirections(
               pergunta: copy.pergunta ?? "",
               opcoes: copy.opcoes ?? [],
               mensagens: copy.mensagens ?? [],
+              // A estrutura escolhida por quem escreveu, guardada com o texto.
+              layout: copy.layout ?? {},
             })),
           )
           .select("*");
@@ -344,18 +346,52 @@ export async function runImages(
       const direction = porId.get(peca.directionId)!;
       const copy = peca.copyId ? copyPorId.get(peca.copyId) ?? null : null;
       const texto = textoDaPeca(copy, direction, destaques);
+      const doProduto = await fotoDoProduto(admin, products, direction, texto.headline, produtoDoBriefing);
 
       /*
-       * O texto não é mais desenhado pelo modelo.
+       * Vitrine sem foto do produto é embalagem em branco.
        *
-       * A peça inteira gerada pela IA saía com o logo e o rótulo em rabisco, e
-       * sem conserto possível: errou o acento, gera tudo de novo. Agora o
-       * modelo entrega só a fotografia, e headline, subheadline, CTA e logo
-       * entram por cima, vetoriais, no layout fixo de `DEFAULT_LAYOUT` —
-       * logo no topo à esquerda, texto no rodapé, CTA em pílula.
+       * O desenho pede o produto sozinho, grande, em primeiro plano. Sem foto
+       * de referência o modelo inventa o frasco, e a regra que vale nesse caso
+       * é "nenhum texto, letra, número ou logotipo na imagem" — que existe
+       * para ele não rabiscar palavra torta. O resultado é um frasco com o
+       * rótulo vazio, em tamanho de cartaz. Peça assim não vai ao ar.
+       *
+       * Com a foto anexada a regra é outra, a de reproduzir o rótulo, e aí a
+       * vitrine é o melhor desenho que existe aqui.
+       *
+       * Sem ela, a peça cai em `destaque`: fotografia de cena ocupando o
+       * quadro, onde o produto não é o objeto em close e a ausência de rótulo
+       * legível não denuncia nada.
+       */
+      const arquetipo = peca.arquetipo === "vitrine" && !doProduto ? "destaque" : peca.arquetipo;
+      const escolhas = (copy?.layout ?? null) as
+        | { escala?: string; alinhamento?: string; ancora?: string }
+        | null;
+
+      /*
+       * A peça nasce em fotografia mais texto vetorial. Sempre.
+       *
+       * A escolha é de quem vai publicar, não de estética. Texto desenhado por
+       * modelo erra acento, e uma peça com erro não vai ao ar: ela vira uma
+       * geração jogada fora e um teste a menos rodando. Composto, o texto sai
+       * certo por construção, e corrigir é de graça.
+       *
+       * O que mudou, e é o que faltava, é a arquitetura: `planejarPecas` agora
+       * escolhe um dos oito arquétipos e a composição carrega essa escolha.
+       * Antes o `layout` ia vazio daqui, o canvas caía no padrão, e trinta
+       * peças saíam em coluna com outra foto atrás.
+       *
+       * Desenhar a peça inteira pelo modelo continua possível, por peça, em
+       * `regenerate-asset` com `mode: "peca"`. É uma decisão de quem olhou o
+       * resultado, não do lote inteiro no escuro.
        */
       const composition = composicaoDaPeca({
-        templateKey: "coluna",
+        templateKey: arquetipo,
+        arquetipo,
+        escala: escolhas?.escala,
+        alinhamento: escolhas?.alinhamento,
+        ancora: escolhas?.ancora,
         format: peca.formato,
         headline: texto.headline,
         subheadline: texto.subheadline,
@@ -372,17 +408,13 @@ export async function runImages(
       /*
        * A ordem das referências é a ordem da importância: a foto do produto
        * primeiro, porque é o objeto que precisa ser reproduzido com fidelidade;
-       * o estilo da marca depois, que é luz e clima. O teto de quatro é do
-       * próprio provedor, e a disputa é real: cada imagem a mais dilui a
-       * anterior.
+       * a referência de layout depois, porque é a arquitetura da peça; o estilo
+       * da marca por último, que é luz e clima.
        *
-       * A referência de layout saiu daqui. Ela existia para o modelo desenhar a
-       * arquitetura do anúncio — e agora quem desenha a arquitetura é o canvas.
-       * Mandar um anúncio pronto junto de "não escreva nada" só convidava o
-       * modelo a redesenhar texto. As vagas que ela ocupava vão para o produto
-       * e para o estilo, que é o que a fotografia precisa.
+       * O teto de quatro é do próprio provedor, e a disputa é real: cada imagem
+       * a mais dilui a anterior. A foto do produto nunca cede lugar, e o estilo
+       * fica com o que sobrar.
        */
-      const doProduto = await fotoDoProduto(admin, products, direction, texto.headline, produtoDoBriefing);
       const doEstiloCabem = doEstilo.slice(0, 4 - (doProduto ? 1 : 0));
 
       const references = [doProduto, ...doEstiloCabem].filter(
@@ -395,10 +427,16 @@ export async function runImages(
       };
 
       const { image, usage } = await generateImage({
-        // A hipótese do caminho criativo é o que separa uma fotografia da outra.
+        /*
+         * O arquétipo vai junto porque ele decide ONDE o texto vai cair, e a
+         * fotografia precisa abrir espaço no lugar certo. Pedir folga no topo
+         * e escrever no rodapé é o que obrigava o scrim a 45% para salvar a
+         * leitura, e é o que dava aquele ar de foto de banco com degradê.
+         */
         prompt: imagePrompt(direction.visual_prompt ?? "", brand, peca.formato, {
           produto: anexos.produto,
           estilo: anexos.estilo,
+          arquetipo,
         }),
         references,
         quality,
@@ -422,16 +460,18 @@ export async function runImages(
           direction_id: direction.id,
           copy_id: copy?.id ?? null,
           grupo_id: grupos.get(peca.ideia),
-          // A referência que deu a estrutura fica registrada: é o que permite
-          // descobrir depois qual layout converte.
-          // O layout é o do arquétipo que sobrepõe o texto, não o da referência.
-          template_key: "coluna",
+          /*
+           * O arquétipo fica registrado em `template_key`. É por ele que a
+           * performance se atribui depois: com oito desenhos rodando, dá para
+           * perguntar qual converte. Com um só, não havia pergunta.
+           */
+          template_key: arquetipo,
           status: "revisao",
           format: peca.formato,
           /*
            * A imagem é a fotografia de fundo; o texto vem por cima no canvas.
-           * `generated_path` fica nulo de propósito — é ele que o card usa para
-           * decidir entre mostrar o arquivo pronto e compor a peça.
+           * `generated_path` nulo é o que faz o card compor, e é o que a ação
+           * "desenhar inteira pela IA" preenche depois, se pedirem.
            */
           base_path: basePath,
           generated_path: null,

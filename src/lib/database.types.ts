@@ -935,6 +935,7 @@ export type Database = {
           formato: string
           headline: string
           id: string
+          layout: Json
           mensagens: Json
           opcoes: Json
           pergunta: string
@@ -953,6 +954,7 @@ export type Database = {
           formato?: string
           headline?: string
           id?: string
+          layout?: Json
           mensagens?: Json
           opcoes?: Json
           pergunta?: string
@@ -971,6 +973,7 @@ export type Database = {
           formato?: string
           headline?: string
           id?: string
+          layout?: Json
           mensagens?: Json
           opcoes?: Json
           pergunta?: string

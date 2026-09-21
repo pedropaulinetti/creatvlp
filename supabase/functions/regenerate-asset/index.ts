@@ -133,10 +133,15 @@ export const handler = serveJson(async (request) => {
        */
       if (needsPeca) {
         /*
-         * A referência que deu a estrutura da peça original fica registrada em
-         * `template_key`. Reencontrá-la é o que faz "editar o texto e gerar de
-         * novo" devolver a mesma peça com outro texto, em vez de um anúncio
-         * completamente diferente.
+         * `template_key` guarda o desenho da peça. Nas novas é o nome do
+         * arquétipo escolhido no plano; nas antigas é a chave de uma
+         * referência do acervo. A busca cobre o segundo caso e não acha nada
+         * no primeiro, que é o esperado: aí a forma vem do arquétipo, descrita
+         * em palavras.
+         *
+         * Reencontrar o desenho é o que faz redesenhar devolver a mesma peça
+         * com outro tratamento, em vez de um anúncio sem relação com o que
+         * estava na tela.
          */
         const { data: referencia } = await admin
           .from("layout_references")
@@ -150,6 +155,7 @@ export const handler = serveJson(async (request) => {
 
         const spec = {
           estrutura: String(referencia?.estrutura ?? ""),
+          arquetipo: String(asset.template_key ?? ""),
           layoutAnexado: Boolean(urlDaReferencia),
           headline: String(composition.headline ?? ""),
           subheadline: String(composition.subheadline ?? ""),

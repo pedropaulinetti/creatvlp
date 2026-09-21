@@ -204,6 +204,46 @@ const ateLimite = (limite: number, minimo = 0) =>
 const semNulo = <T extends z.ZodTypeAny>(schema: T) =>
   z.preprocess((valor) => (valor === null ? undefined : valor), schema);
 
+/**
+ * A estrutura da peça, escolhida por quem escreveu o texto.
+ * Espelha o schema das Edge Functions.
+ *
+ * Era rodízio no servidor: variedade sim, intenção não. Quem acabou de
+ * escrever "Qual seu maior desafio?" sabe que aquilo é enquete e que o título
+ * não deve dominar; quem escreveu "13% mais volume" sabe o contrário.
+ *
+ * Quatro enums, e não layout livre. O canvas continua desenhando a letra, com
+ * a ortografia impossível de errar; o que o modelo ganha é a arquitetura.
+ * Valor fora do vocabulário cai no padrão em vez de derrubar a geração.
+ */
+export const ARQUETIPOS_DA_COPY = [
+  "vitrine", "coluna", "destaque", "bloco", "manchete", "listicle", "numeros", "enquete", "conversa",
+] as const;
+
+const enumTolerante = <T extends readonly [string, ...string[]]>(valores: T, padrao: T[number]) =>
+  z.preprocess(
+    (valor) => (typeof valor === "string" && (valores as readonly string[]).includes(valor) ? valor : padrao),
+    z.enum(valores),
+  );
+
+export const layoutDaCopySchema = z.object({
+  /** Vazio quando o modelo não escolheu: aí vale o rodízio do servidor. */
+  arquetipo: z
+    .preprocess(
+      (valor) =>
+        typeof valor === "string" && (ARQUETIPOS_DA_COPY as readonly string[]).includes(valor) ? valor : "",
+      z.string(),
+    )
+    .default(""),
+  /** Quanto o título manda na peça. */
+  escala: enumTolerante(["dominante", "equilibrada", "discreta"] as const, "equilibrada").default("equilibrada"),
+  alinhamento: enumTolerante(["esquerda", "centro"] as const, "esquerda").default("esquerda"),
+  /** Onde o texto pousa no quadro. */
+  ancora: enumTolerante(["topo", "rodape"] as const, "rodape").default("rodape"),
+});
+
+export type LayoutDaCopy = z.infer<typeof layoutDaCopySchema>;
+
 export const copySchema = z
   .object({
     formato: semNulo(z.enum(["titulo", "enquete", "conversa"]).default("titulo")),
@@ -213,6 +253,8 @@ export const copySchema = z
     cta: z.string().trim().min(1),
     bullets: semNulo(z.array(ateLimite(70, 1)).max(5).default([])),
     pergunta: semNulo(ateLimite(120).default("")),
+    /* A estrutura que esta copy pede. Ausente, o servidor decide por rodízio. */
+    layout: semNulo(layoutDaCopySchema.default({})),
     opcoes: semNulo(
       z
         .array(z.object({ texto: ateLimite(40, 1), votos: semNulo(z.number().int().min(0).max(999).default(0)) }))

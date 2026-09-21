@@ -369,3 +369,65 @@ describe("pecaCompletaPrompt", () => {
     expect(prompt).toContain("ACRESCENTAR");
   });
 });
+
+/**
+ * A fotografia precisa abrir espaço onde o texto realmente cai.
+ *
+ * O prompt pedia folga no topo, fixo, enquanto o layout escrevia no rodapé.
+ * A foto reservava um lado, o texto caía no outro, e o scrim a 45% salvava a
+ * leitura por cima do que estivesse lá. Era de onde vinha o ar de foto de
+ * banco com degradê.
+ */
+describe("espaço negativo por arquétipo", () => {
+  const marca = { name: "Memoê", segment: "café" } as Parameters<typeof imagePrompt>[1];
+
+  it("pede a metade de baixo quando o texto vai no rodapé", () => {
+    const prompt = imagePrompt("cena", marca, "4:5", { produto: false, estilo: 0, arquetipo: "coluna" });
+    expect(prompt).toContain("metade de baixo");
+  });
+
+  it("pede a metade direita quando os números ficam à direita", () => {
+    const prompt = imagePrompt("cena", marca, "4:5", { produto: false, estilo: 0, arquetipo: "numeros" });
+    expect(prompt).toContain("metade direita");
+    expect(prompt).not.toContain("metade de baixo");
+  });
+
+  it("pede fundo sem assunto dominante quando a peça é quase toda tipografia", () => {
+    const prompt = imagePrompt("cena", marca, "4:5", { produto: false, estilo: 0, arquetipo: "enquete" });
+    expect(prompt).toContain("sem assunto dominante");
+  });
+
+  it("cai na coluna quando o arquétipo não é conhecido", () => {
+    const semNome = imagePrompt("cena", marca, "4:5", { produto: false, estilo: 0 });
+    const coluna = imagePrompt("cena", marca, "4:5", { produto: false, estilo: 0, arquetipo: "coluna" });
+    expect(semNome).toBe(coluna);
+  });
+});
+
+/**
+ * Embalagem com rótulo em branco.
+ *
+ * Numa peça real o modelo entregou dois frascos com o rótulo vazio, em
+ * tamanho de cartaz. A causa é a regra de não escrever nada, que existe para
+ * ele não rabiscar palavra torta, aplicada a um produto que ele inventou. Com
+ * a foto anexada a regra é outra e o rótulo sai certo.
+ */
+describe("rótulo da embalagem", () => {
+  const marca = { name: "OTO", segment: "cuidados masculinos" } as Parameters<typeof imagePrompt>[1];
+
+  it("sem foto do produto, proíbe embalagem em primeiro plano", () => {
+    const prompt = imagePrompt("cena", marca, "4:5", { produto: false, estilo: 0 });
+    expect(prompt).toContain("Nenhuma embalagem rotulada em primeiro plano");
+  });
+
+  it("com foto do produto, manda reproduzir o rótulo", () => {
+    const prompt = imagePrompt("cena", marca, "4:5", { produto: true, estilo: 0 });
+    expect(prompt).toContain("reproduza-o exatamente como está na foto");
+    expect(prompt).not.toContain("Nenhuma embalagem rotulada em primeiro plano");
+  });
+
+  it("a vitrine pede o rótulo inteiro e de frente", () => {
+    const prompt = imagePrompt("cena", marca, "4:5", { produto: true, estilo: 0, arquetipo: "vitrine" });
+    expect(prompt).toContain("rótulo da embalagem precisa aparecer inteiro");
+  });
+});

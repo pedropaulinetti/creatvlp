@@ -13,7 +13,16 @@ import { distribuirReferencias, type ReferenciaDeLayout } from "./referencias.ts
 
 export type CaminhoComCopies = {
   id: string;
-  copies: { id: string }[];
+  /**
+   * A copy traz a forma e, desde 21/09, a estrutura que ela pede.
+   * `layout.arquetipo` vazio significa "não escolhi": aí vale o rodízio.
+   */
+  copies: {
+    id: string;
+    formato?: string | null;
+    headline?: string | null;
+    layout?: { arquetipo?: string } | null;
+  }[];
 };
 
 export type PecaPlanejada = {
@@ -27,8 +36,91 @@ export type PecaPlanejada = {
   /** Nulo quando o caminho não tem copy salva: a peça usa o hook do caminho. */
   copyId: string | null;
   formato: string;
+  /**
+   * O desenho desta peça.
+   *
+   * Os dois renderizadores leem daqui: a composição em HTML escolhe o
+   * componente em `ARQUETIPOS`, e a peça desenhada pelo modelo recebe a forma
+   * descrita em palavras. Mesma decisão, dois jeitos de executá-la.
+   */
+  arquetipo: string;
   referencia: ReferenciaDeLayout | null;
 };
+
+/**
+ * Os desenhos que giram, na ordem do rodízio.
+ *
+ * `coluna` abre porque é o mais seguro, e é o único que existia: até aqui toda
+ * peça saía nele, porque a composição devolvia `layout` vazio e o canvas caía
+ * no padrão. Trinta peças, trinta colunas com outra foto atrás.
+ *
+ * `enquete` e `conversa` ficam de fora do rodízio: eles não são uma escolha de
+ * gosto, são a forma que a copy já tem. Entram por `formato`, não por sorteio.
+ */
+export const ARQUETIPOS_EM_RODIZIO = ["vitrine", "coluna", "destaque", "bloco", "manchete", "listicle", "numeros"] as const;
+
+/** Todos os desenhos que os dois renderizadores conhecem. */
+export const ARQUETIPOS_CONHECIDOS = [...ARQUETIPOS_EM_RODIZIO, "enquete", "conversa"] as const;
+
+/**
+ * Os desenhos de cartaz, onde o título é a peça inteira.
+ *
+ * Neles o título entra em caixa alta ocupando quase metade da altura. Só
+ * funciona com manchete curta: medido numa peça real, "Vá além do cuidado:
+ * deixe sua marca com um cabelo forte e um aroma inesquecível" tem 81
+ * caracteres, e o ajuste automático encolheu o corpo até caber. Título
+ * encolhido não é título, é corpo de texto em caixa alta.
+ */
+const DE_CARTAZ = new Set(["vitrine", "bloco", "destaque", "manchete"]);
+
+/**
+ * Quanto de manchete um cartaz aguenta.
+ *
+ * 52 é o comprimento em que a frase ainda cabe em três linhas curtas no corpo
+ * grande. "Mais volume de cabelo já no primeiro uso" tem 40 e sobra espaço.
+ */
+export const LIMITE_DE_MANCHETE_DE_CARTAZ = 52;
+
+export function arquetipoDaPeca(
+  formatoDaCopy: string | null | undefined,
+  ideia: number,
+  /**
+   * O que quem escreveu o texto pediu.
+   *
+   * Ganha do rodízio, e é a diferença entre variedade e intenção: uma enquete
+   * pede título discreto, um número forte pede título dominante, e o rodízio
+   * não sabe disso. Vazio quando o modelo não escolheu ou escolheu um nome que
+   * não existe, e aí o rodízio segue valendo.
+   */
+  escolhido?: string | null,
+  /**
+   * A manchete desta peça.
+   *
+   * O desenho precisa caber no texto, e não o contrário. Encolher o corpo até
+   * a frase caber salva o recorte e mata a peça: vira um bloco de texto em
+   * caixa alta onde devia haver uma manchete.
+   */
+  headline?: string | null,
+): string {
+  if (formatoDaCopy === "enquete") return "enquete";
+  if (formatoDaCopy === "conversa") return "conversa";
+
+  const pedido = escolhido?.trim();
+  const valido =
+    pedido && ARQUETIPOS_CONHECIDOS.includes(pedido as (typeof ARQUETIPOS_CONHECIDOS)[number])
+      ? pedido
+      : ARQUETIPOS_EM_RODIZIO[ideia % ARQUETIPOS_EM_RODIZIO.length];
+
+  /*
+   * Manchete longa demais para cartaz cai na coluna, que escreve no rodapé em
+   * corpo de leitura e aguenta três linhas sem encolher nada. Os asteriscos do
+   * destaque não contam: eles somem no desenho.
+   */
+  const letras = (headline ?? "").replace(/\*/g, "").trim().length;
+  if (DE_CARTAZ.has(valido) && letras > LIMITE_DE_MANCHETE_DE_CARTAZ) return "coluna";
+
+  return valido;
+}
 
 /** Sem formato escolhido, o vertical de feed é o que mais roda. */
 const FORMATO_PADRAO = "4:5";
@@ -77,12 +169,20 @@ export function planejarPecas({
 
     const copy = caminho.copies.length ? caminho.copies[jaUsadas % caminho.copies.length] : null;
 
+    /*
+     * O desenho é da ideia, não da geração: feed e stories da mesma peça
+     * precisam do mesmo layout, senão viram dois anúncios em vez de duas
+     * proporções do mesmo.
+     */
+    const arquetipo = arquetipoDaPeca(copy?.formato, indice, copy?.layout?.arquetipo, copy?.headline);
+
     for (const formato of doFormato) {
       plano.push({
         ideia: indice,
         directionId: caminho.id,
         copyId: copy?.id ?? null,
         formato,
+        arquetipo,
         referencia: doLayout[indice] ?? null,
       });
     }

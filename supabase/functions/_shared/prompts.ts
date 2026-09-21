@@ -177,6 +177,50 @@ Cada variação nasce para um formato diferente, nesta ordem:
 
 Se ${count} for menor que 3, use os formatos nesta ordem a partir do primeiro.
 
+Cada copy também escolhe a ESTRUTURA da peça, no campo "layout". Você não
+desenha nada: o CreatvOS desenha, e por isso a ortografia nunca sai errada. O
+que você decide é a arquitetura, que é o que separa um anúncio do outro.
+
+- "arquetipo": o desenho.
+  · "vitrine"  — produto grande à direita, texto à esquerda. Para quando o
+                 produto É o argumento, e a marca tem foto dele.
+  · "destaque" — fotografia ocupando tudo, título forte embaixo. Para promessa
+                 direta, quando a cena carrega a emoção.
+  · "bloco"    — fundo de cor sólida, título gigante, lista. Para oferta e para
+                 argumento que se prova em itens.
+  · "manchete" — cara de notícia. Para prova, dado, laudo, imprensa.
+  · "listicle" — título e itens numerados sobre a foto. Para "3 motivos".
+  · "numeros"  — números grandes ao lado do produto. Para métrica e resultado.
+  · "coluna"   — o mais sóbrio: foto e texto no rodapé. Quando nenhum acima serve.
+  · "enquete" e "conversa" acompanham o formato de mesmo nome.
+
+- "escala": quanto o título manda.
+  "dominante" para frase curta que é o anúncio inteiro; "discreta" quando a
+  imagem ou a lista é que carregam; "equilibrada" no resto.
+
+- "alinhamento": "esquerda" quase sempre; "centro" só quando a peça é uma frase
+  sozinha, sem lista.
+
+- "ancora": "rodape" quando a imagem precisa respirar em cima, "topo" quando o
+  argumento tem que ser lido antes da imagem.
+
+O arquétipo manda no tamanho da headline, e não o contrário:
+
+- "vitrine", "bloco", "destaque" e "manchete" desenham o título em caixa alta
+  ocupando quase metade da peça. Neles a headline tem que ser MANCHETE: no
+  máximo 50 caracteres, uma ideia só, sem dois-pontos e sem subordinada.
+  Boa: "Mais volume já no primeiro uso". Ruim: "Vá além do cuidado: deixe sua
+  marca com um cabelo forte e um aroma inesquecível" — essa é longa demais e o
+  desenho a encolhe até virar corpo de texto.
+- "coluna", "listicle" e "numeros" aguentam headline longa, porque escrevem em
+  corpo de leitura. Escolha um deles quando a frase precisar de fôlego.
+
+Se a ideia não couber em 50 caracteres, ou você corta a frase, ou escolhe um
+arquétipo que aguenta. As duas saídas são melhores que a terceira.
+
+Escolha por intenção, não por variedade: peças diferentes desta campanha podem
+repetir o arquétipo se for o certo para cada uma.
+
 Regras:
 - headline com até 120 caracteres, subheadline com até 160, body com até 600.
 - Devolva TODOS os campos, e nunca com "null": campo de texto que este formato
@@ -221,11 +265,51 @@ ${context}`;
  * o formato que ele tem de verdade. Sem isso a peça saía com uma foto de banco
  * de imagens que não é o que a marca vende — que era a queixa.
  */
+/**
+ * Onde a fotografia precisa abrir espaço, por arquétipo.
+ *
+ * O prompt pedia folga no topo, fixo, enquanto o `DEFAULT_LAYOUT` escrevia no
+ * rodapé. A foto reservava um lado e o texto caía no outro, e o `scrim` a 45%
+ * existia para salvar a leitura em cima do que estivesse lá. É de onde vinha o
+ * ar de foto de banco com degradê preto.
+ *
+ * Agora quem escolhe o desenho diz também onde ele escreve.
+ */
+const ESPACO_NEGATIVO: Record<string, string> = {
+  /*
+   * A vitrine só é escolhida quando há foto do produto anexada: o pipeline
+   * troca para `destaque` quando não há. Sem esse desvio o modelo inventava o
+   * frasco e, obedecendo à regra de não escrever nada, entregava a embalagem
+   * com o rótulo em branco, em tamanho de cartaz.
+   */
+  vitrine:
+    "Produto sozinho, grande, deslocado para a direita do quadro, sobre fundo liso e contínuo de estúdio, sem cena nem objetos em volta. A metade esquerda fica inteira como fundo limpo. O rótulo da embalagem precisa aparecer inteiro, nítido e de frente: é ele que identifica a marca nesta peça.",
+  coluna:
+    "Deixe a metade de baixo do quadro com espaço negativo natural — parede, superfície, sombra ou fundo desfocado — e mantenha o assunto na metade de cima.",
+  destaque:
+    "Deixe a metade de baixo do quadro limpa e de baixo contraste, com o assunto acima dela e nada essencial no rodapé.",
+  manchete:
+    "Mantenha o assunto centralizado na faixa do meio, com o terço de cima e o terço de baixo limpos e sem detalhe importante.",
+  listicle:
+    "Cena de baixo contraste e pouca textura, que vai ficar escurecida atrás de uma lista: assunto reconhecível mas sem detalhe fino competindo.",
+  numeros:
+    "Componha o assunto deslocado para a esquerda do quadro, deixando a metade direita como fundo limpo e contínuo.",
+  bloco:
+    "Produto isolado e centralizado sobre fundo simples e uniforme, com folga generosa em volta, como foto de catálogo.",
+  enquete:
+    "Fundo simples, uniforme e de baixo contraste, sem assunto dominante: a peça vai ser quase toda tipografia.",
+  conversa:
+    "Fundo claro, liso e discreto, sem assunto dominante: por cima entram balões de mensagem.",
+};
+
 export function imagePrompt(
   visualPrompt: string,
   brand: BrandMemory,
   format: string,
-  referencias: { produto: boolean; estilo: number } = { produto: false, estilo: 0 },
+  referencias: { produto: boolean; estilo: number; arquetipo?: string } = {
+    produto: false,
+    estilo: 0,
+  },
 ): string {
   const ratio = format === "9:16" ? "vertical 9:16" : format === "1:1" ? "quadrado 1:1" : "vertical 4:5";
   return [
@@ -245,7 +329,7 @@ export function imagePrompt(
     "Enquadramento tolerante a recorte: o assunto centralizado e inteiro, com folga limpa em cima e embaixo, e nada essencial nos 15% das bordas. A mesma fotografia vai ser usada com o texto no rodapé, no topo e recortada em quadrado.",
     // Pedir "área limpa" faz o modelo pintar um bloco chapado com borda dura.
     // O que se quer é espaço negativo dentro da própria cena.
-    "Enquadramento com espaço negativo natural na parte superior — parede, céu, superfície ou fundo desfocado — onde depois entra o texto.",
+    ESPACO_NEGATIVO[referencias.arquetipo ?? ""] ?? ESPACO_NEGATIVO.coluna,
     "A fotografia preenche o quadro inteiro, de borda a borda, sem faixas, molduras, bordas brancas ou blocos de cor chapada.",
     "Iluminação natural, cores fiéis, acabamento editorial, alta nitidez.",
     /*
@@ -261,7 +345,13 @@ export function imagePrompt(
      */
     referencias.produto
       ? "IMPORTANTE: o rótulo faz parte do produto — reproduza-o exatamente como está na foto de referência: mesmas palavras, mesma tipografia, mesmas cores, mesma posição na embalagem, nítido e legível. Não o apague, não o borre, não o traduza nem invente letras no lugar dele. Fora o rótulo do próprio produto, a imagem não pode conter nenhum texto, número, logotipo, marca d'água, etiqueta de preço, selo, botão ou interface. Apenas a cena fotográfica."
-      : "IMPORTANTE: a imagem não pode conter nenhum texto, letra, número, palavra, logotipo, marca d'água, etiqueta de preço, selo, botão ou interface. Apenas a cena fotográfica.",
+      /*
+       * Sem foto de referência, embalagem em close é armadilha: proibir texto
+       * entrega rótulo em branco, e permitir entrega rabisco. A saída é não
+       * pedir a embalagem em primeiro plano. Dizer isso ao modelo é mais
+       * seguro do que confiar que a cena não vai cair nela sozinha.
+       */
+      : "IMPORTANTE: a imagem não pode conter nenhum texto, letra, número, palavra, logotipo, marca d'água, etiqueta de preço, selo, botão ou interface. Apenas a cena fotográfica. Nenhuma embalagem rotulada em primeiro plano: sem o rótulo, o frasco sai em branco e denuncia a montagem. Prefira a cena, a pessoa, o gesto ou o resultado do produto.",
   ]
     .filter(Boolean)
     .join(" ");
@@ -301,6 +391,14 @@ export function pecaCompletaPrompt(
      * das formas escritas à mão abaixo.
      */
     estrutura: string;
+    /**
+     * O desenho escolhido em `planejarPecas`, o mesmo nome que o canvas usa.
+     *
+     * Substitui o sorteio que havia aqui: forma decidida por `Math.random()`
+     * não dá para reproduzir, e fazia a versão em stories da mesma peça sair
+     * com outra arquitetura.
+     */
+    arquetipo?: string;
     /** Se uma referência de layout foi anexada como imagem a esta chamada. */
     temReferencia?: boolean;
     /** Idem, vindo de `anexos`. Mantido separado para não quebrar chamadas antigas. */
@@ -345,6 +443,14 @@ export function pecaCompletaPrompt(
   const proxima = () => ORDINAL[posicao++] ?? "próxima";
 
   const FORMA: Record<string, string> = {
+    vitrine:
+      "Fundo liso e claro. O produto aparece grande à direita, cortado pela borda do quadro. À esquerda, o título em caixa alta ocupando quase metade da altura, abaixo dele uma lista de quatro itens com caixas de seleção e, no rodapé, um botão largo em pílula.",
+    coluna:
+      "Fotografia ocupando a peça inteira. Logotipo pequeno no topo à esquerda. No rodapé, sobre um escurecimento suave da própria imagem, o título em duas ou três linhas, uma linha de apoio abaixo e um botão em pílula. Nada de faixas ou molduras.",
+    enquete:
+      "Uma pergunta como anúncio: fundo de cor sólida, a pergunta em tipografia grande na metade de cima e, abaixo, as respostas empilhadas em barras arredondadas, cada uma preenchida em proporção diferente, com a porcentagem à direita. Sem título separado.",
+    conversa:
+      "Print de uma troca de mensagens: fundo claro, balões alternados entre esquerda e direita, o da marca na cor de destaque, tipografia de aplicativo de mensagem. Nada de título publicitário por cima.",
     bloco:
       "Fundo de cor sólida ocupando a peça inteira. Título gigantesco em caixa alta no topo, ocupando um terço da altura. Abaixo, uma lista curta com marcadores de visto. No rodapé, a foto do produto num recorte de cantos arredondados e, embaixo dela, um botão em pílula.",
     listicle:
@@ -385,11 +491,14 @@ export function pecaCompletaPrompt(
     : "";
 
   /*
-   * Com referência anexada, a forma vem dela. Sem nenhuma — acervo ainda não
-   * semeado — sorteia uma das escritas à mão: cair sempre em `destaque` era o
-   * que fazia a campanha inteira sair com o mesmo layout.
+   * Com referência anexada, a forma vem dela. Sem nenhuma, vale o arquétipo
+   * escolhido no plano, que é o mesmo que a composição em HTML usaria.
+   *
+   * Antes isto era `Math.random()`. Sorteio não se reproduz: a versão 9:16 da
+   * mesma ideia caía numa forma diferente da 4:5, e as duas deixavam de ser a
+   * mesma peça em duas proporções.
    */
-  const escritaAMao = Object.values(FORMA)[Math.floor(Math.random() * Object.keys(FORMA).length)];
+  const escritaAMao = FORMA[peca.arquetipo ?? ""] ?? FORMA.coluna;
 
   return [
     `Anúncio publicitário ${proporcao} pronto para publicar, da marca ${brand.name}.`,

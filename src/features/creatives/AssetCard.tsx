@@ -56,12 +56,6 @@ export function AssetCard({
   const actions = useAssetActions();
   const [open, setOpen] = React.useState(false);
   const [rejecting, setRejecting] = React.useState(false);
-  /*
-   * Criativo antigo — gerado quando a peça era fotografia mais composição em
-   * HTML — não tem `generated_path`. Continua renderizando pelo caminho velho:
-   * sem isso, campanha antiga vira card vazio.
-   */
-  const ehComposicaoAntiga = !asset.generated_path;
   const [reason, setReason] = React.useState("");
   const [format, setFormat] = React.useState<Format>((asset.format as Format) ?? "4:5");
   const canvasRef = React.useRef<HTMLDivElement>(null);
@@ -94,6 +88,18 @@ export function AssetCard({
     () => todasAsVersoes.find((item) => item.format === format) ?? asset,
     [todasAsVersoes, format, asset],
   );
+
+  /*
+   * Compor ou mostrar o arquivo pronto é decisão DO FORMATO que está à vista,
+   * não do principal do grupo.
+   *
+   * Lia `asset.generated_path`, que é sempre a linha do 4:5. Redesenhar o
+   * 9:16 gravava a peça na linha do 9:16, o job terminava, o toast dizia
+   * "Peça redesenhada" — e o card continuava compondo por cima da fotografia,
+   * porque perguntava à linha errada. O redesenho parecia não funcionar, e o
+   * crédito já tinha sido gasto.
+   */
+  const ehComposicaoAntiga = !versaoVisivel.generated_path;
 
   const urlVisivel = versaoVisivel.generated_path
     ? urlPorFormato?.get(versaoVisivel.format) ?? generatedUrl ?? null
@@ -153,7 +159,7 @@ export function AssetCard({
           ) : (
             <img
               src={urlVisivel ?? ""}
-              alt={(asset.composition as { headline?: string })?.headline || "Peça gerada"}
+              alt={(versaoVisivel.composition as { headline?: string })?.headline || "Peça gerada"}
               className="mx-auto rounded-[10px]"
               style={{ width: compact ? 200 : 260 }}
             />
@@ -169,16 +175,16 @@ export function AssetCard({
         </div>
 
         <p className="line-clamp-2 text-[13px] leading-snug text-ink">
-          {(asset.composition as { headline?: string })?.headline || "Sem headline"}
+          {(versaoVisivel.composition as { headline?: string })?.headline || "Sem headline"}
         </p>
 
         {/*
           De qual layout esta peça saiu. É o que permite descobrir, olhando os
           resultados, qual estrutura converte — e repetir só ela na próxima.
         */}
-        {!ehComposicaoAntiga && asset.template_key && asset.template_key !== "peca-livre" && (
+        {versaoVisivel.template_key && versaoVisivel.template_key !== "peca-livre" && (
           <span className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-ink-faint">
-            layout · {asset.template_key}
+            layout · {versaoVisivel.template_key}
           </span>
         )}
 
@@ -484,6 +490,36 @@ function AssetDetailDialog({
           <Button variant="quiet" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
+
+          {/*
+            Desenhar a peça inteira pelo modelo deixa de ser privilégio das
+            peças antigas. A composição é o padrão porque texto composto sai
+            certo e se corrige de graça; esta ação é para quando alguém olhou
+            uma peça específica e quer a liberdade gráfica do modelo nela.
+            Salva o texto antes, para a peça desenhada nascer com o texto que
+            está na tela e não com o anterior.
+          */}
+          {!versaoVisivel.generated_path && (
+            <Button
+              variant="outline"
+              loading={actions.updateComposition.isPending || actions.regenerate.isPending}
+              onClick={() => {
+                actions.updateComposition.mutate(
+                  { id: versaoVisivel.id, composition: draft, templateKey: draft.template_key },
+                  {
+                    onSuccess: () =>
+                      actions.regenerate.mutate(
+                        { assetId: versaoVisivel.id, mode: "peca" },
+                        { onSuccess: () => onOpenChange(false) },
+                      ),
+                  },
+                );
+              }}
+            >
+              Desenhar inteira pela IA · 1 crédito
+            </Button>
+          )}
+
           <Button
             loading={actions.updateComposition.isPending || actions.regenerate.isPending}
             onClick={() => {

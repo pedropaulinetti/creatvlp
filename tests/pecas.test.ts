@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { planejarPecas, geracoesNecessarias } from "../supabase/functions/_shared/pecas.ts";
+import {
+  planejarPecas, geracoesNecessarias, arquetipoDaPeca, ARQUETIPOS_EM_RODIZIO,
+} from "../supabase/functions/_shared/pecas.ts";
 
 const caminhos = [
   { id: "d1", copies: [{ id: "c1" }, { id: "c2" }, { id: "c3" }] },
@@ -99,5 +101,54 @@ describe("planejarPecas", () => {
   it("sem formato pedido, cai no 4:5", () => {
     const pecas = planejarPecas({ quantidade: 2, caminhos, formatos: [], referencias });
     expect(pecas.every((peca) => peca.formato === "4:5")).toBe(true);
+  });
+});
+
+/**
+ * O desenho da peça.
+ *
+ * Oito arquétipos existiam em `arquetipos.tsx` e nenhum era escolhido: a
+ * composição devolvia `layout` vazio, o canvas caía no padrão, e trinta peças
+ * saíam em coluna com outra foto atrás. O rodízio é o que dá variedade sem
+ * modelo novo e sem crédito a mais.
+ */
+describe("arquetipoDaPeca", () => {
+  it("gira entre os desenhos conforme a ideia avança", () => {
+    const total = ARQUETIPOS_EM_RODIZIO.length;
+    const uma_volta = Array.from({ length: total }, (_, ideia) => arquetipoDaPeca(null, ideia));
+
+    expect(new Set(uma_volta).size, "uma volta usa cada desenho uma vez").toBe(total);
+    expect(uma_volta[0]).toBe(ARQUETIPOS_EM_RODIZIO[0]);
+  });
+
+  it("volta ao início depois de esgotar o rodízio", () => {
+    const total = ARQUETIPOS_EM_RODIZIO.length;
+    expect(arquetipoDaPeca(null, total)).toBe(arquetipoDaPeca(null, 0));
+  });
+
+  it("a forma da copy manda sobre o rodízio", () => {
+    expect(arquetipoDaPeca("enquete", 3)).toBe("enquete");
+    expect(arquetipoDaPeca("conversa", 4)).toBe("conversa");
+    // "titulo" não é uma forma própria: entra no rodízio como qualquer outra.
+    expect(arquetipoDaPeca("titulo", 1)).toBe(arquetipoDaPeca(null, 1));
+  });
+
+  it("os formatos de uma mesma ideia compartilham o desenho", () => {
+    const plano = planejarPecas({
+      quantidade: 3,
+      caminhos: [{ id: "c1", copies: [{ id: "k1" }, { id: "k2" }, { id: "k3" }] }],
+      formatos: ["4:5", "9:16"],
+      referencias: [],
+    });
+
+    for (let ideia = 0; ideia < 3; ideia += 1) {
+      const daIdeia = plano.filter((peca) => peca.ideia === ideia);
+      expect(daIdeia).toHaveLength(2);
+      expect(daIdeia[0].arquetipo, "feed e stories são a mesma peça").toBe(daIdeia[1].arquetipo);
+    }
+
+    // E ideias diferentes não caem no mesmo desenho.
+    const porIdeia = [0, 1, 2].map((ideia) => plano.find((peca) => peca.ideia === ideia)!.arquetipo);
+    expect(new Set(porIdeia).size).toBe(3);
   });
 });

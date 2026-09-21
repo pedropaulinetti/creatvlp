@@ -75,6 +75,45 @@ const ateLimite = (limite: number, minimo = 0) =>
 const semNulo = <T extends z.ZodTypeAny>(schema: T) =>
   z.preprocess((valor) => (valor === null ? undefined : valor), schema);
 
+/**
+ * A estrutura da peça, escolhida por quem escreveu o texto.
+ *
+ * Era rodízio no servidor: variedade sim, intenção não. Quem acabou de
+ * escrever "Qual seu maior desafio?" sabe que aquilo é enquete e que o título
+ * não deve dominar; quem escreveu "13% mais volume" sabe o contrário.
+ *
+ * Quatro enums, e não layout livre. O canvas continua desenhando a letra, com
+ * a ortografia impossível de errar; o que o modelo ganha é a arquitetura.
+ * Valor fora do vocabulário cai no padrão em vez de derrubar a geração: o
+ * modelo inventa nome de arquétipo de vez em quando, e isso não é motivo para
+ * perder a campanha inteira.
+ */
+export const ARQUETIPOS_DA_COPY = [
+  "vitrine", "coluna", "destaque", "bloco", "manchete", "listicle", "numeros", "enquete", "conversa",
+] as const;
+
+const enumTolerante = <T extends readonly [string, ...string[]]>(valores: T, padrao: T[number]) =>
+  z.preprocess(
+    (valor) => (typeof valor === "string" && (valores as readonly string[]).includes(valor) ? valor : padrao),
+    z.enum(valores),
+  );
+
+export const layoutDaCopySchema = z.object({
+  /** Vazio quando o modelo não escolheu: aí vale o rodízio do servidor. */
+  arquetipo: z.preprocess(
+    (valor) =>
+      typeof valor === "string" && (ARQUETIPOS_DA_COPY as readonly string[]).includes(valor) ? valor : "",
+    z.string(),
+  ).default(""),
+  /** Quanto o título manda na peça. */
+  escala: enumTolerante(["dominante", "equilibrada", "discreta"] as const, "equilibrada").default("equilibrada"),
+  alinhamento: enumTolerante(["esquerda", "centro"] as const, "esquerda").default("esquerda"),
+  /** Onde o texto pousa no quadro. */
+  ancora: enumTolerante(["topo", "rodape"] as const, "rodape").default("rodape"),
+});
+
+export type LayoutDaCopy = z.infer<typeof layoutDaCopySchema>;
+
 const copyBase = z.object({
   /*
    * A headline pode marcar um termo com *asteriscos*: o renderizador o pinta na
@@ -122,6 +161,12 @@ const copyBase = z.object({
       .max(3)
       .default([]),
   ),
+
+
+  /*
+   * A estrutura que esta copy pede. Ausente, o servidor decide por rodízio.
+   */
+  layout: semNulo(layoutDaCopySchema.default({})),
 
   /** Conversa: as mensagens, na ordem em que aparecem. */
   mensagens: semNulo(
