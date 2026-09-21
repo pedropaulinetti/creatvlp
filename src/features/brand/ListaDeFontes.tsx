@@ -184,7 +184,7 @@ export function ListaDeFontes({
             key={papel}
             papel={papel}
             familia={tipografia[papel]}
-            arquivo={fontes.find((fonte) => fonte.familia === tipografia[papel])}
+            arquivo={fontes.find((fonte) => fonte.familia && fonte.familia === tipografia[papel])}
             lendo={lendo}
             aoMudar={(familia) => aoMudarPapel(papel, familia)}
             aoReceberArquivo={async (arquivo) =>
@@ -223,22 +223,31 @@ function Papel({
   aoReceberArquivo,
 }: {
   papel: PapelChave;
-  familia: string;
+  /**
+   * Pode faltar.
+   *
+   * `typography` da marca é jsonb e nasce `{}` quando a leitura não achou
+   * família nenhuma, ou quando a marca foi criada à mão. Ler `.trim()` de
+   * `undefined` derrubava a aba Visual inteira, e com ela as cores, o logo e
+   * as fontes: tela branca com "Unexpected Application Error".
+   */
+  familia: string | null | undefined;
   arquivo?: FonteDaMarca;
   lendo: boolean;
   aoMudar: (familia: string) => void;
   aoReceberArquivo: (arquivo: File) => Promise<void>;
 }) {
   const [editando, setEditando] = React.useState(false);
-  useFonteRemota(familia);
+  const nome = (familia ?? "").trim();
+  useFonteRemota(nome);
 
   // O arquivo da marca ganha do Google Fonts: é a letra dela, não a homônima.
   const temArquivo = Boolean(arquivo?.url);
   const pilha = temArquivo
-    ? `"marca-${arquivo!.id}", "${familia}", var(--font-sans)`
-    : `"${familia}", var(--font-sans)`;
+    ? `"marca-${arquivo!.id}", "${nome}", var(--font-sans)`
+    : `"${nome}", var(--font-sans)`;
 
-  const vazia = !familia.trim();
+  const vazia = !nome;
 
   return (
     <div className="flex flex-col gap-1">
@@ -265,7 +274,7 @@ function Papel({
       {vazia || editando ? (
         <Input
           autoFocus={editando}
-          value={familia}
+          value={familia ?? ""}
           placeholder={papel === "headline" ? "Instrument Serif" : "Inter"}
           aria-label={`Fonte de ${ROTULO[papel]}`}
           onChange={(evento) => aoMudar(evento.target.value)}

@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { History, ImagePlus, Plus, Trash2, X } from "lucide-react";
+import { History, ImagePlus, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge, Divider, Panel } from "@/components/ui/surface";
 import { Field, Input, Textarea, MonoLabel, Hint } from "@/components/ui/field";
@@ -15,6 +15,7 @@ import { signedUrl, signedUrls, uploadBrandFile, validateImageFile } from "@/lib
 import { CHANNELS, FORMATS, FORMAT_LABEL } from "@/lib/schemas";
 import { CamposDoProduto, GaleriaDoProduto } from "@/features/brand/CamposDoProduto";
 import { ListaDeFontes, type FonteDaMarca } from "@/features/brand/ListaDeFontes";
+import { CorDaPaleta, PAPEIS_DA_COR } from "@/features/brand/CorDaPaleta";
 import { GaleriaDeReferencias } from "@/features/brand/GaleriaDeReferencias";
 import { cn } from "@/lib/utils";
 import type { Database } from "@/lib/database.types";
@@ -617,22 +618,20 @@ export default function BrandPage() {
             <span className="text-[13px] font-medium text-ink">Cores</span>
             <div className="flex flex-wrap items-center gap-2">
               {draft.colors.map((color, index) => (
-                <span
+                <CorDaPaleta
                   key={`${color.hex}-${index}`}
-                  className="inline-flex items-center gap-2 rounded-full border border-line bg-card py-1 pl-1.5 pr-2.5"
-                >
-                  <span aria-hidden className="h-4 w-4 rounded-full border border-line" style={{ background: color.hex }} />
-                  <span className="font-mono text-[11.5px] uppercase text-ink-2">{color.hex}</span>
-                  <Badge tone="muted">{color.role}</Badge>
-                  <button
-                    type="button"
-                    aria-label={`Remover ${color.hex}`}
-                    onClick={() => patch({ colors: draft.colors.filter((_, position) => position !== index) })}
-                    className="text-ink-faint hover:text-danger"
-                  >
-                    <X className="h-3 w-3" aria-hidden />
-                  </button>
-                </span>
+                  cor={color}
+                  aoMudar={(valores) =>
+                    patch({
+                      colors: draft.colors.map((atual, position) =>
+                        position === index ? { ...atual, ...valores } : atual,
+                      ),
+                    })
+                  }
+                  aoRemover={() =>
+                    patch({ colors: draft.colors.filter((_, position) => position !== index) })
+                  }
+                />
               ))}
               <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-dashed border-line-contrast px-3 py-1.5 text-[12.5px] text-ink-muted hover:border-accent hover:text-ink">
                 <input
@@ -644,7 +643,15 @@ export default function BrandPage() {
                         ...draft.colors,
                         {
                           hex: event.target.value.toUpperCase(),
-                          role: draft.colors.length === 0 ? "primaria" : "apoio",
+                          /*
+                           * Nasce no primeiro papel que ainda não existe na
+                           * paleta. Nascer sempre como "apoio" obrigava a
+                           * trocar logo depois, e antes nem dava para trocar.
+                           */
+                          role:
+                            PAPEIS_DA_COR.find(
+                              (papel) => !draft.colors.some((cor) => cor.role === papel),
+                            ) ?? "apoio",
                           label: "",
                         },
                       ],

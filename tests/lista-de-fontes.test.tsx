@@ -111,3 +111,30 @@ describe("ListaDeFontes", () => {
     expect(screen.queryByRole("button", { name: "corrigir nome" })).toBeNull();
   });
 });
+
+/**
+ * Marca sem tipografia declarada.
+ *
+ * `typography` é jsonb e nasce `{}` quando a leitura não achou família nenhuma
+ * ou quando a marca foi criada à mão. Ler `.trim()` de `undefined` derrubava a
+ * aba Visual inteira em Minha Marca, e com ela as cores, o logo e as fontes:
+ * tela branca com "Unexpected Application Error".
+ */
+describe("tipografia ausente", () => {
+  it("renderiza sem quebrar quando a marca não tem tipografia", () => {
+    const vazia = {} as { headline: string; body: string };
+    expect(() =>
+      render(
+        <ListaDeFontes
+          fontes={[]}
+          tipografia={vazia}
+          aoMudarPapel={() => {}}
+          aoEnviar={async () => {}}
+          aoRemover={() => {}}
+        />,
+      ),
+    ).not.toThrow();
+
+    expect(screen.getByLabelText("Fonte de destaque")).toBeTruthy();
+  });
+});

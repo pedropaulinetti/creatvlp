@@ -1,7 +1,8 @@
 import * as React from "react";
-import { Check, ImagePlus, Plus, Sparkles, Trash2, X } from "lucide-react";
+import { Check, ImagePlus, Plus, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ListaDeFontes } from "@/features/brand/ListaDeFontes";
+import { CorDaPaleta } from "@/features/brand/CorDaPaleta";
 import { CamposDoProduto, GaleriaDoProduto } from "@/features/brand/CamposDoProduto";
 import { Field, Hint, Input, MonoLabel, Textarea } from "@/components/ui/field";
 import { InlineError, Notice } from "@/components/ui/states";
@@ -201,7 +202,7 @@ function Identidade({
 
         <div className="flex flex-wrap gap-1.5">
           {draft.colors.map((cor, index) => (
-            <Cor
+            <CorDaPaleta
               key={`${cor.hex}-${index}`}
               cor={cor}
               atraso={Math.min(index, 9) * 45}
@@ -372,74 +373,6 @@ function Referencias({
         a marca.
       </Hint>
     </div>
-  );
-}
-
-/** Os papéis que a composição entende. Papel errado vira peça com cor trocada. */
-const PAPEIS = ["primaria", "secundaria", "apoio", "fundo", "texto"];
-
-/**
- * Uma cor da paleta.
- *
- * Antes só dava para remover. O hex vinha da folha de estilo e podia estar
- * quase certo — e o papel, que é o que decide se a cor vira fundo ou texto na
- * peça, era adivinhado pela leitura sem ninguém poder corrigir.
- */
-function Cor({
-  cor,
-  atraso,
-  aoMudar,
-  aoRemover,
-}: {
-  cor: { hex: string; role: string; label: string };
-  atraso: number;
-  aoMudar: (valores: Partial<{ hex: string; role: string }>) => void;
-  aoRemover: () => void;
-}) {
-  return (
-    <span
-      className="cair flex items-center gap-1.5 rounded-full border border-line bg-surface py-1 pl-1.5 pr-1.5"
-      style={{ animationDelay: `${atraso}ms` }}
-    >
-      <label className="cursor-pointer" title="Trocar a cor">
-        <span
-          aria-hidden
-          className="block h-4 w-4 rounded-full border border-line"
-          style={{ background: cor.hex }}
-        />
-        <input
-          type="color"
-          value={cor.hex}
-          aria-label={`Cor ${cor.hex}`}
-          className="sr-only"
-          onChange={(evento) => aoMudar({ hex: evento.target.value.toUpperCase() })}
-        />
-      </label>
-
-      <span className="font-mono text-[11px] uppercase text-ink-2">{cor.hex}</span>
-
-      <select
-        value={PAPEIS.includes(cor.role) ? cor.role : "apoio"}
-        aria-label={`Papel de ${cor.hex}`}
-        onChange={(evento) => aoMudar({ role: evento.target.value })}
-        className="cursor-pointer rounded-full bg-transparent py-0.5 text-[10.5px] text-ink-faint focus:outline-none"
-      >
-        {PAPEIS.map((papel) => (
-          <option key={papel} value={papel}>
-            {papel}
-          </option>
-        ))}
-      </select>
-
-      <button
-        type="button"
-        aria-label={`Remover ${cor.hex}`}
-        onClick={aoRemover}
-        className="flex h-4 w-4 items-center justify-center rounded-full text-ink-faint transition-colors hover:bg-danger-soft hover:text-danger"
-      >
-        <X className="h-3 w-3" aria-hidden />
-      </button>
-    </span>
   );
 }
 

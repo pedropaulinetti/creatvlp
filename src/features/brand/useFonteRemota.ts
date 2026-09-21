@@ -8,9 +8,10 @@ import * as React from "react";
  * Quando nem uma nem outra resolve, o link não carrega e a amostra fica na
  * fonte do app, sem tratamento extra.
  */
-export function useFonteRemota(familia: string) {
+export function useFonteRemota(familia: string | null | undefined) {
   React.useEffect(() => {
-    const nome = familia.trim();
+    // Marca sem tipografia declarada é o caso comum, não o excepcional.
+    const nome = (familia ?? "").trim();
     if (!nome || /^(inter|dm mono)$/i.test(nome)) return;
 
     const href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(nome).replace(/%20/g, "+")}&display=swap`;
