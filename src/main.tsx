@@ -7,7 +7,14 @@ import { router } from "@/app/router";
 import { AuthProvider } from "@/features/auth/AuthProvider";
 import { WorkspaceProvider } from "@/features/workspace/WorkspaceProvider";
 import { TooltipProvider } from "@/components/ui/overlays";
+import { recarregarPorDeploy } from "@/lib/stale-chunk";
 import "@/styles/app.css";
+
+// O Vite avisa quando um arquivo pré-carregado some. Acontece quando sai um deploy
+// novo e a aba de quem está usando ainda tem o index.html antigo: recarregar resolve.
+window.addEventListener("vite:preloadError", (evento) => {
+  if (recarregarPorDeploy()) evento.preventDefault();
+});
 
 const queryClient = new QueryClient({
   defaultOptions: {

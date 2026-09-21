@@ -27,6 +27,22 @@ export const errors = {
   quota: (message: string) => new AppError("quota_excedida", message, 429),
   rateLimit: () =>
     new AppError("muitas_requisicoes", "Muitas solicitações seguidas. Aguarde um instante.", 429),
+  /*
+   * Não é excesso de pedidos: é o mesmo pedido, ainda em curso.
+   *
+   * Os dois caíam em "Muitas solicitações seguidas", e o comentário em
+   * `jobs.ts` já registrava o estrago: a mensagem não descreve nada do que
+   * está acontecendo e não diz como sair. Quem clicava em gerar de novo lia
+   * que estava rápido demais, quando o problema era o contrário.
+   */
+  emCurso: (segundosRestantes: number) =>
+    new AppError(
+      "geracao_em_curso",
+      segundosRestantes > 0
+        ? `Esta geração ainda está em andamento. Se ela não terminar, dá para tentar de novo em ${segundosRestantes}s.`
+        : "Esta geração ainda está em andamento. Aguarde ela terminar.",
+      429,
+    ),
   upstream: (message = "O provedor de IA não respondeu como esperado.") =>
     new AppError("falha_ia", message, 502),
   internal: (message = "Algo não deu certo do nosso lado.") =>

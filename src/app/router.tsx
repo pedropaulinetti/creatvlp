@@ -10,9 +10,27 @@ import {
   NotFound,
 } from "@/app/guards";
 import { LoadingBlock } from "@/components/ui/states";
+import { ehArquivoDeDeployAntigo, recarregarPorDeploy } from "@/lib/stale-chunk";
+
+/**
+ * Se o arquivo da página não existir mais (deploy novo com a aba antiga aberta),
+ * recarrega em vez de mostrar a tela de erro do router.
+ */
+const lazyComRecarga = (loader: () => Promise<{ default: React.ComponentType }>) =>
+  React.lazy(async () => {
+    try {
+      return await loader();
+    } catch (erro) {
+      if (ehArquivoDeDeployAntigo(erro) && recarregarPorDeploy()) {
+        // A recarga já começou: segura o Suspense para a falha não piscar na tela.
+        return await new Promise<never>(() => {});
+      }
+      throw erro;
+    }
+  });
 
 const lazyPage = (loader: () => Promise<{ default: React.ComponentType }>) => {
-  const Component = React.lazy(loader);
+  const Component = lazyComRecarga(loader);
   return (
     <React.Suspense fallback={<LoadingBlock className="min-h-[60dvh]" />}>
       <Component />
@@ -21,8 +39,8 @@ const lazyPage = (loader: () => Promise<{ default: React.ComponentType }>) => {
 };
 
 // A landing tem CSS próprio (tema escuro). A pesquisa continua sendo a página legada.
-const LandingPage = React.lazy(() => import("@/pages/LandingPage"));
-const ResearchPage = React.lazy(() =>
+const LandingPage = lazyComRecarga(() => import("@/pages/LandingPage"));
+const ResearchPage = lazyComRecarga(() =>
   import("@/legacy/pages.jsx").then((module) => ({ default: module.ConversationalResearchPage })),
 );
 

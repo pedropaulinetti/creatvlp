@@ -17,10 +17,16 @@ export type Job = { id: string; status: string; output: unknown; reused: boolean
  * Depois disso, um job ainda "processing" é dado por morto.
  *
  * A geração mais lenta do sistema — imagens de vários caminhos — cabe em muito
- * menos que isso. O valor é folgado de propósito: retomar cedo demais duplicaria
- * um trabalho que ainda está em curso.
+ * menos que isso.
+ *
+ * O valor vem do teto da própria Edge Function, que encerra aos 150 segundos.
+ * Passado esse teto com folga, não existe mais ninguém do outro lado: o job
+ * está morto por construção, não por suposição. Eram 5 minutos redondos, e
+ * cada minuto a mais era um minuto em que a pessoa clicava em gerar e recebia
+ * um 429 sem saída.
  */
-const TEMPO_ATE_ABANDONO_MS = 5 * 60 * 1000;
+export const TETO_DA_FUNCAO_MS = 150 * 1000;
+export const TEMPO_ATE_ABANDONO_MS = TETO_DA_FUNCAO_MS + 30 * 1000;
 
 /**
  * A chave de idempotência de uma geração de caminhos criativos.
@@ -79,8 +85,12 @@ export async function openJob(
        * voltam antes, senão a reserva conta duas vezes.
        */
       const iniciado = existing.started_at ? Date.parse(existing.started_at) : 0;
-      const abandonado = !iniciado || Date.now() - iniciado > TEMPO_ATE_ABANDONO_MS;
-      if (!abandonado) throw errors.rateLimit();
+      const decorrido = iniciado ? Date.now() - iniciado : Infinity;
+      const abandonado = !iniciado || decorrido > TEMPO_ATE_ABANDONO_MS;
+      if (!abandonado) {
+        // Diz quanto falta para a retomada automática, em vez de "aguarde".
+        throw errors.emCurso(Math.ceil((TEMPO_ATE_ABANDONO_MS - decorrido) / 1000));
+      }
 
       const reservados = Number(existing.credits_reserved ?? 0);
       if (reservados > 0) {

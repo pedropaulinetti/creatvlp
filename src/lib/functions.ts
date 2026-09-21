@@ -18,6 +18,16 @@ export class FunctionError extends Error {
   get isRateLimit() {
     return this.code === "muitas_requisicoes";
   }
+  /**
+   * O mesmo pedido ainda está rodando no servidor.
+   *
+   * Separado do rate limit porque a conduta é outra: aqui não adianta pedir
+   * mais devagar, adianta esperar a geração anterior terminar ou ser dada por
+   * abandonada. A mensagem do servidor já diz quantos segundos faltam.
+   */
+  get isEmCurso() {
+    return this.code === "geracao_em_curso";
+  }
 }
 
 export type EdgeFunctionName =

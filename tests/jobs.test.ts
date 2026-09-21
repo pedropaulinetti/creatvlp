@@ -7,7 +7,9 @@
  * saída, nem esperando.
  */
 import { describe, expect, it } from "vitest";
-import { openJob, chaveDosCaminhos } from "../supabase/functions/_shared/jobs.ts";
+import {
+  openJob, chaveDosCaminhos, TETO_DA_FUNCAO_MS, TEMPO_ATE_ABANDONO_MS,
+} from "../supabase/functions/_shared/jobs.ts";
 
 /** Cliente mínimo do Supabase: só o que o openJob usa. */
 function clienteFalso(existente: Record<string, unknown> | null) {
@@ -48,7 +50,11 @@ const minutosAtras = (n: number) => new Date(Date.now() - n * 60_000).toISOStrin
 describe("openJob e o job travado", () => {
   it("recusa quando a geração está mesmo em curso", async () => {
     const { cliente } = clienteFalso({ id: "j1", status: "processing", started_at: agora(), credits_reserved: 0 });
-    await expect(openJob(cliente as never, base)).rejects.toMatchObject({ code: "muitas_requisicoes" });
+    /*
+     * Código próprio, e não o do rate limit: aqui não adianta pedir mais
+     * devagar, adianta esperar. A mensagem diz quantos segundos faltam.
+     */
+    await expect(openJob(cliente as never, base)).rejects.toMatchObject({ code: "geracao_em_curso" });
   });
 
   it("retoma o job que ficou parado tempo demais", async () => {
@@ -96,5 +102,30 @@ describe("a chave da geração de caminhos", () => {
 
   it("chave vazia não vale: volta a ser a do briefing", () => {
     expect(chaveDosCaminhos("c1", 2, "   ")).toBe(chaveDosCaminhos("c1", 2));
+  });
+});
+
+/**
+ * "Muitas solicitações seguidas" quando não havia solicitação nenhuma.
+ *
+ * Job que morreu no meio ficava "processing", e toda nova tentativa levava o
+ * mesmo 429 do rate limit. A mensagem dizia que a pessoa estava rápida demais
+ * quando o problema era o contrário, e não dizia como sair. O tempo até dar o
+ * job por abandonado passou a sair do teto da própria função: depois dele, não
+ * há mais ninguém do outro lado.
+ */
+describe("tempo até dar o job por abandonado", () => {
+  it("sai do teto da função, com folga, em vez de um número redondo", () => {
+    expect(TETO_DA_FUNCAO_MS).toBe(150_000);
+    // Cobre o teto inteiro e sobra meio minuto.
+    expect(TEMPO_ATE_ABANDONO_MS).toBeGreaterThan(TETO_DA_FUNCAO_MS);
+    // E é bem menor que os 5 minutos antigos, que era tempo travado à toa.
+    expect(TEMPO_ATE_ABANDONO_MS).toBeLessThan(5 * 60_000);
+  });
+
+  it("a mensagem diz quanto falta, em vez de mandar aguardar", async () => {
+    const { cliente } = clienteFalso({ id: "j1", status: "processing", started_at: agora(), credits_reserved: 0 });
+    await expect(openJob(cliente as never, base)).rejects.toThrow(/ainda está em andamento/);
+    await expect(openJob(cliente as never, base)).rejects.toThrow(/\d+s/);
   });
 });
