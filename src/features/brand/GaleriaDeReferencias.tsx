@@ -9,8 +9,14 @@ export type ReferenciaVisual = {
   url: string | null;
 };
 
-/** Quantas o `referenciasDeEstilo` leva para a geração. */
-export const QUANTAS_ENTRAM = 3;
+/**
+ * Quantas entram em CADA peça.
+ *
+ * O provedor aceita quatro anexos e a foto do produto leva um, então sobram
+ * três por chamada. Não é quantas da marca são usadas: desde a rotação, o
+ * acervo inteiro entra, três de cada vez, girando peça a peça.
+ */
+export const QUANTAS_POR_PECA = 3;
 
 const FORMATOS = "image/png,image/jpeg,image/webp,image/avif";
 
@@ -22,8 +28,11 @@ const FORMATOS = "image/png,image/jpeg,image/webp,image/avif";
  * de estragar sem perceber — uma foto de banner promocional ali dentro puxa
  * toda a campanha para o visual errado.
  *
- * Por isso as três primeiras são marcadas: é preciso ver quais realmente vão,
- * não só quais estão guardadas.
+ * As três primeiras eram marcadas como "usadas" porque a geração levava só
+ * elas, sempre. Desde que a janela passou a girar por peça, todas entram: a
+ * ideia 1 usa as três primeiras, a ideia 2 as três seguintes, e assim por
+ * diante. A tela dizia que nove das doze não serviam para nada, o que fazia
+ * quem cuidava da marca parar de enviar.
  */
 export function GaleriaDeReferencias({
   referencias,
@@ -44,18 +53,19 @@ export function GaleriaDeReferencias({
     <div className="flex flex-col gap-2">
       <MonoLabel>
         Referências visuais · {referencias.length}
-        {referencias.length > QUANTAS_ENTRAM && ` · ${QUANTAS_ENTRAM} entram na geração`}
+        {referencias.length > QUANTAS_POR_PECA && ` · ${QUANTAS_POR_PECA} por peça, girando`}
       </MonoLabel>
 
       <div className="flex flex-wrap gap-2">
         {referencias.map((referencia, indice) => {
-          const entra = indice < QUANTAS_ENTRAM;
+          // A primeira peça começa por estas; as demais seguem girando.
+          const naPrimeiraPeca = indice < QUANTAS_POR_PECA;
           return (
             <div key={referencia.id} className="group relative">
               <div
                 className={cn(
                   "h-20 w-20 overflow-hidden rounded-[8px] border transition-colors",
-                  entra ? "border-accent" : "border-line opacity-60",
+                  naPrimeiraPeca ? "border-accent" : "border-line",
                 )}
               >
                 {referencia.url && (
@@ -71,9 +81,9 @@ export function GaleriaDeReferencias({
                 )}
               </div>
 
-              {entra && (
+              {naPrimeiraPeca && (
                 <span className="absolute left-1 top-1 rounded-full bg-accent px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-surface">
-                  usada
+                  1ª peça
                 </span>
               )}
 
@@ -86,13 +96,13 @@ export function GaleriaDeReferencias({
                 <Trash2 className="h-3 w-3" aria-hidden />
               </button>
 
-              {!entra && (
+              {!naPrimeiraPeca && (
                 <button
                   type="button"
                   onClick={() => aoTornarPrincipal(referencia.id)}
                   className="absolute inset-x-0 bottom-0 rounded-b-[8px] bg-ink/70 py-0.5 text-[10px] text-surface opacity-0 transition-opacity group-hover:opacity-100"
                 >
-                  usar esta
+                  pôr na frente
                 </button>
               )}
             </div>
@@ -130,7 +140,7 @@ export function GaleriaDeReferencias({
       <Hint>
         {enviando
           ? "Enviando…"
-          : "Fotos de como a marca fotografa — produto, ambiente, pessoas. As três primeiras entram na geração; passe o mouse para trocar."}
+          : `Fotos de como a marca fotografa: produto, ambiente, pessoas. Todas entram, ${QUANTAS_POR_PECA} por peça, girando. Quanto mais variedade de luz e clima, menos as peças se parecem. Até ${maximo}.`}
       </Hint>
     </div>
   );

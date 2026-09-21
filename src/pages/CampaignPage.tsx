@@ -8,7 +8,7 @@ import { Badge, Divider } from "@/components/ui/surface";
 import { Tabs, TabsList, TabsTrigger, TabsContent, Checkbox } from "@/components/ui/controls";
 import { Dialog, DialogContent, DialogFooter } from "@/components/ui/overlays";
 import { MonoLabel, Hint } from "@/components/ui/field";
-import { EmptyState, ErrorState, LoadingBlock, InlineError, Notice } from "@/components/ui/states";
+import { EmptyState, ErrorState, LoadingBlock, InlineError, Notice, Spinner } from "@/components/ui/states";
 import { BriefEditor } from "@/features/campaigns/BriefEditor";
 import { DirectionCard } from "@/features/campaigns/DirectionCard";
 import { AssetCard } from "@/features/creatives/AssetCard";
@@ -163,6 +163,15 @@ export default function CampaignPage() {
     let geradas = 0;
     let falhas = 0;
 
+    /*
+     * O diálogo fecha antes de começar, não depois de terminar.
+     *
+     * Ficava aberto e travado pelos minutos inteiros da geração, e quem pediu
+     * trinta peças olhava para um botão girando sem ver nada acontecer. As
+     * peças já nascem uma a uma no banco: o que faltava era a tela mostrar.
+     */
+    setImageDialog(false);
+
     try {
       for (const [indice, doLote] of lotes.entries()) {
         setProgresso(
@@ -181,13 +190,16 @@ export default function CampaignPage() {
 
         geradas += result.assets.length;
         falhas += result.failed;
+
+        /*
+         * Recarrega a cada lote, e não só no fim: as peças do lote 1 aparecem
+         * enquanto o lote 2 ainda está desenhando. Numa geração de trinta
+         * peças são três esperas curtas em vez de uma longa e cega.
+         */
+        await queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] });
       }
 
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] }),
-        queryClient.invalidateQueries({ queryKey: ["quota"] }),
-      ]);
-      setImageDialog(false);
+      await queryClient.invalidateQueries({ queryKey: ["quota"] });
       setSelected([]);
       toast.success(
         falhas
@@ -253,6 +265,25 @@ export default function CampaignPage() {
       </div>
 
       <InlineError>{actionError}</InlineError>
+
+      {/*
+        O andamento vive na página, não no diálogo.
+        
+        Ficava dentro do modal, que prendia a tela inteira até a última peça.
+        Aqui ele acompanha enquanto você olha o que já saiu, e as peças dos
+        lotes anteriores aparecem na aba Criativos conforme nascem.
+      */}
+      {generatingImages && (
+        <div className="flex items-center gap-2.5 rounded-[10px] border border-line bg-sunken px-3.5 py-2.5">
+          <Spinner className="h-3.5 w-3.5" />
+          <span className="text-[13px] text-ink">
+            {progresso || "Desenhando as peças"}
+          </span>
+          <span className="ml-auto text-[12px] text-ink-muted">
+            As peças aparecem aqui conforme ficam prontas.
+          </span>
+        </div>
+      )}
 
       <Tabs defaultValue={assets.length ? "criativos" : "caminhos"}>
         <TabsList>
